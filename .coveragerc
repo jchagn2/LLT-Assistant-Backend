@@ -1,0 +1,86 @@
+[run]
+# Source code directory to measure coverage for
+source = app
+
+# Files to omit from coverage
+omit =
+    # Test files
+    tests/*
+    # Virtual environment
+    venv/*
+    .venv/*
+    # Build artifacts
+    */build/*
+    */dist/*
+    # Init files (usually just imports)
+    */__init__.py
+    # Development scripts
+    scripts/*
+
+# Branch coverage enabled
+branch = True
+
+# Parallel execution support
+parallel = True
+
+[report]
+# Minimum coverage percentage to pass (60% target)
+fail_under = 60
+
+# Precision for coverage percentage
+precision = 2
+
+# Show lines that weren't executed
+show_missing = True
+
+# Skip files with 100% coverage in report
+skip_covered = False
+
+# Skip empty files
+skip_empty = True
+
+# Sorting in coverage report
+sort = Cover
+
+# Exclude specific lines from coverage using comments
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code
+    def __repr__
+    def __str__
+
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+
+    # Don't complain about ellipsis in protocol/stub definitions
+    \.\.\.
+
+    # Don't complain about pass statements
+    pass
+
+[html]
+# Directory for HTML coverage report
+directory = htmlcov
+
+# Title for HTML report
+title = LLT Assistant Backend Coverage Report
+
+[xml]
+# Output file for XML coverage report (for CI/CD)
+output = coverage.xml
+
+[json]
+# Output file for JSON coverage report
+output = coverage.json
+pretty_print = True
