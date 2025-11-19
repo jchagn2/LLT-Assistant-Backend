@@ -4,7 +4,7 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "8886:8886"
     environment:
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.qnaigc.com/v1}
