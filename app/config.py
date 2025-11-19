@@ -1,8 +1,5 @@
 """Configuration management for LLT Assistant Backend."""
 
-import os
-from typing import Optional
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -46,6 +43,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(default="json", description="Log format (json or text)")
 
+    # CORS Configuration
+    cors_origins: list[str] = Field(
+        default=["*"],
+        description="Allowed CORS origins (use specific domains in production)",
+    )
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
@@ -55,4 +58,6 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
+# NOTE: This is a singleton for configuration only, which is acceptable
+# as configuration should be immutable after initialization.
 settings = Settings()
