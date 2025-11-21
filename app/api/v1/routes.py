@@ -13,8 +13,6 @@ from starlette.responses import Response as StarletteResponse
 
 from app.analyzers.rule_engine import RuleEngine
 from app.api.v1.schemas import (
-    AnalyzeRequest,
-    AnalyzeResponse,
     AsyncJobResponse,
     CoverageOptimizationRequest,
     GenerateTestsRequest,

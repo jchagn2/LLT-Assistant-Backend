@@ -12,13 +12,12 @@ from typing import Dict, List, Optional
 
 from app.analyzers.ast_parser import ParsedTestFile, parse_test_file
 from app.api.v1.schemas import (
+    AnalysisMetrics,
     AnalyzeResponse,
     FileInput,
     ImpactAnalysisResponse,
     ImpactItem,
 )
-from app.core.issue_aggregator import IssueAggregator
-from app.core.metrics_calculator import MetricsCalculator
 from app.core.protocols import LLMAnalyzerProtocol, RuleEngineProtocol
 from app.core.strategies import get_strategy
 
@@ -42,8 +41,6 @@ class TestAnalyzer:
         self,
         rule_engine: RuleEngineProtocol,
         llm_analyzer: LLMAnalyzerProtocol,
-        issue_aggregator: Optional[IssueAggregator] = None,
-        metrics_calculator: Optional[MetricsCalculator] = None,
     ):
         """
         Initialize the test analyzer.
@@ -51,13 +48,9 @@ class TestAnalyzer:
         Args:
             rule_engine: Rule-based analysis engine
             llm_analyzer: LLM-based analyzer
-            issue_aggregator: Issue aggregation service (uses default if None)
-            metrics_calculator: Metrics calculation service (uses default if None)
         """
         self.rule_engine = rule_engine
         self.llm_analyzer = llm_analyzer
-        self.issue_aggregator = issue_aggregator or IssueAggregator()
-        self.metrics_calculator = metrics_calculator or MetricsCalculator()
 
     async def analyze_files(
         self,
@@ -71,8 +64,7 @@ class TestAnalyzer:
         This method orchestrates the analysis pipeline:
         1. Parse files into AST
         2. Execute analysis strategy based on mode
-        3. Aggregate and deduplicate issues
-        4. Calculate metrics
+        3. Calculate metrics
 
         Args:
             files: List of test files to analyze
@@ -106,8 +98,12 @@ class TestAnalyzer:
             )
 
             # Step 3: Calculate metrics
-            metrics = self.metrics_calculator.calculate_metrics(
-                parsed_files, all_issues, start_time
+            total_tests = self._count_total_tests(parsed_files)
+            analysis_time_ms = int((time.time() - start_time) * 1000)
+            metrics = AnalysisMetrics(
+                total_tests=total_tests,
+                issues_count=len(all_issues),
+                analysis_time_ms=analysis_time_ms,
             )
 
             logger.info(
@@ -185,6 +181,28 @@ class TestAnalyzer:
     async def close(self) -> None:
         """Close the analyzer and cleanup resources."""
         await self.llm_analyzer.close()
+
+    def _count_total_tests(self, parsed_files: List[ParsedTestFile]) -> int:
+        """
+        Count total number of test functions across all files.
+
+        Args:
+            parsed_files: List of parsed test files
+
+        Returns:
+            Total number of test functions
+        """
+        total_tests = 0
+
+        for parsed_file in parsed_files:
+            # Count module-level test functions
+            total_tests += len(parsed_file.test_functions)
+
+            # Count test methods in test classes
+            for test_class in parsed_file.test_classes:
+                total_tests += len(test_class.methods)
+
+        return total_tests
 
 
 class ImpactAnalyzer:

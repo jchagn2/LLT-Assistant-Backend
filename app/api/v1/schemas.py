@@ -15,18 +15,6 @@ class FileInput(BaseModel):
     )
 
 
-class AnalyzeRequest(BaseModel):
-    """Request payload for /api/analyze."""
-
-    files: List[FileInput] = Field(description="List of test files to analyze")
-    mode: Literal["rules-only", "llm-only", "hybrid"] = Field(
-        default="hybrid", description="Analysis mode"
-    )
-    config: Optional[Dict[str, Any]] = Field(
-        default=None, description="Optional configuration overrides"
-    )
-
-
 class IssueSuggestion(BaseModel):
     """Fix suggestion for an issue."""
 
