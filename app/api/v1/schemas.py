@@ -189,11 +189,9 @@ class TaskStatusResponse(BaseModel):
         default=None,
         description="Task creation timestamp (ISO 8601 format)",
     )
-    result: Optional[
-        Union[GenerateTestsResult, CoverageOptimizationResult, Dict[str, Any]]
-    ] = Field(
+    result: Optional[Union[GenerateTestsResult, CoverageOptimizationResult]] = Field(
         default=None,
-        description="Task result (when status=completed, type depends on workflow)",
+        description="Task result (GenerateTestsResult for Feature 1, CoverageOptimizationResult for Feature 2). Only present when status=completed.",
     )
     error: Optional[TaskError] = Field(
         default=None, description="Error details (when status=failed)"

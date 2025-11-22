@@ -239,10 +239,14 @@ components:
           type: string
           format: date-time
         result:
-          type: object
+          oneOf:
+            - $ref: '#/components/schemas/GenerateTestsResult'
+            - $ref: '#/components/schemas/CoverageOptimizationResult'
           description: |
-            - For Feature 1: See `GenerateTestsResult`
-            - For Feature 2: See `CoverageOptimizationResult`
+            Task result varies by feature type:
+            - Feature 1 (Test Generation): Returns GenerateTestsResult with generated_code and explanation
+            - Feature 2 (Coverage Optimization): Returns CoverageOptimizationResult with recommended_tests array
+            Only present when status is 'completed'.
         error:
           type: object
           properties:
