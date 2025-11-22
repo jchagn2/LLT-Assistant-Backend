@@ -173,9 +173,10 @@ async def submit_coverage_optimization(
         task_payload = request.model_dump()
 
         logger.info(
-            "Received coverage optimization request: %d files, %d uncovered ranges",
-            len(request.files),
-            sum(len(f.uncovered_ranges) for f in request.files),
+            "Received coverage optimization request: source_code_length=%d, uncovered_ranges=%d, framework=%s",
+            len(request.source_code),
+            len(request.uncovered_ranges),
+            request.framework,
         )
         logger.debug("Request payload: %s", task_payload)
 
