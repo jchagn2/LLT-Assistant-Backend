@@ -1,8 +1,10 @@
-import pytest
 import uuid
 from unittest.mock import MagicMock
+
+import pytest
+
+from app.analyzers.ast_parser import ParsedTestFile, TestClassInfo, TestFunctionInfo
 from app.core.analysis.uncertain_case_detector import UncertainCaseDetector
-from app.analyzers.ast_parser import ParsedTestFile, TestFunctionInfo, TestClassInfo
 
 
 @pytest.fixture
