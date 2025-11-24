@@ -40,10 +40,11 @@ RETRY_INITIAL_BACKOFF_SECONDS = 2
 RETRY_MAX_BACKOFF_SECONDS = 60
 RETRY_BACKOFF_MULTIPLIER = 2
 
-# Uncertain case detection thresholds
-MIN_ASSERTIONS_FOR_COMPLEX = 3
-MIN_DECORATORS_FOR_UNUSUAL = 3
-MIN_NAME_PARTS_FOR_SIMILARITY = 2
+# Uncertain case detection thresholds (optimized to reduce LLM calls)
+MIN_ASSERTIONS_FOR_COMPLEX = 5  # Increased from 3 to reduce false positives
+MIN_DECORATORS_FOR_UNUSUAL = 4  # Increased from 3
+NAME_SIMILARITY_THRESHOLD = 0.75  # Jaccard similarity threshold (0-1)
+MAX_LLM_CALLS_PER_FILE = 5  # Limit uncertain tests per file to control costs
 
 # Issue types
 ISSUE_TYPE_REDUNDANT_ASSERTION = "redundant-assertion"

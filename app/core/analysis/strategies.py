@@ -188,11 +188,26 @@ class HybridStrategy(AnalysisStrategy):
     This strategy uses fast rule-based checks for all tests, then applies
     LLM analysis only to uncertain cases that need deeper inspection.
     This provides a good balance between speed and comprehensiveness.
+
+    Optimized to minimize LLM token consumption by using stricter
+    uncertain case detection criteria.
     """
 
     def __init__(self):
         """Initialize hybrid strategy with uncertain case detector."""
-        self.uncertain_detector = UncertainCaseDetector()
+        from app.core.constants import (
+            MAX_LLM_CALLS_PER_FILE,
+            MIN_ASSERTIONS_FOR_COMPLEX,
+            MIN_DECORATORS_FOR_UNUSUAL,
+            NAME_SIMILARITY_THRESHOLD,
+        )
+
+        self.uncertain_detector = UncertainCaseDetector(
+            min_assertions_for_complex=MIN_ASSERTIONS_FOR_COMPLEX,
+            min_decorators_for_unusual=MIN_DECORATORS_FOR_UNUSUAL,
+            similarity_threshold=NAME_SIMILARITY_THRESHOLD,
+            max_llm_calls_per_file=MAX_LLM_CALLS_PER_FILE,
+        )
 
     async def analyze(
         self,

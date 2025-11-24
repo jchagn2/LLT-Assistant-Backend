@@ -1,11 +1,12 @@
 """API routes for version 1.
 
 This module defines the REST API endpoints using FastAPI with proper
-dependency injection to eliminate global state.
+dependency injection and resource management.
 """
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -40,27 +41,31 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def get_analyzer() -> TestAnalyzer:
+@asynccontextmanager
+async def get_analyzer_context():
     """
-    Dependency injection factory for TestAnalyzer.
+    Async context manager for TestAnalyzer with proper resource cleanup.
 
-    This function follows the Dependency Inversion Principle by creating
-    instances with proper dependency injection, eliminating global state.
+    This ensures LLM clients are properly closed after use, preventing
+    resource leaks.
 
-    Returns:
+    Yields:
         TestAnalyzer instance
 
     Raises:
         HTTPException: If analyzer initialization fails
     """
     try:
-        # Initialize components with dependency injection
         rule_engine = RuleEngine()
         llm_client = create_llm_client()
         llm_analyzer = LLMAnalyzer(llm_client)
+        analyzer = TestAnalyzer(rule_engine, llm_analyzer)
 
-        # Create main analyzer with injected dependencies
-        return TestAnalyzer(rule_engine, llm_analyzer)
+        try:
+            yield analyzer
+        finally:
+            await analyzer.close()
+
     except Exception as e:
         logger.error(f"Failed to initialize analyzer: {e}")
         raise HTTPException(
@@ -68,18 +73,27 @@ def get_analyzer() -> TestAnalyzer:
         )
 
 
-def get_quality_service() -> QualityAnalysisService:
+@asynccontextmanager
+async def get_quality_service_context():
     """
-    Dependency injection factory for QualityAnalysisService.
+    Async context manager for QualityAnalysisService with proper resource cleanup.
 
-    Returns:
+    This ensures LLM clients are properly closed after use.
+
+    Yields:
         QualityAnalysisService instance
 
     Raises:
         HTTPException: If service initialization fails
     """
     try:
-        return QualityAnalysisService()
+        service = QualityAnalysisService()
+
+        try:
+            yield service
+        finally:
+            await service.close()
+
     except Exception as e:
         logger.error(f"Failed to initialize quality service: {e}")
         raise HTTPException(
@@ -87,11 +101,14 @@ def get_quality_service() -> QualityAnalysisService:
         )
 
 
-def get_impact_analyzer() -> ImpactAnalyzer:
+@asynccontextmanager
+async def get_impact_analyzer_context():
     """
-    Dependency injection factory for ImpactAnalyzer.
+    Async context manager for ImpactAnalyzer with proper resource cleanup.
 
-    Returns:
+    This ensures LLM clients are properly closed after use.
+
+    Yields:
         ImpactAnalyzer instance
 
     Raises:
@@ -101,12 +118,40 @@ def get_impact_analyzer() -> ImpactAnalyzer:
         rule_engine = RuleEngine()
         llm_client = create_llm_client()
         llm_analyzer = LLMAnalyzer(llm_client)
-        return ImpactAnalyzer(rule_engine, llm_analyzer)
+        analyzer = ImpactAnalyzer(rule_engine, llm_analyzer)
+
+        try:
+            yield analyzer
+        finally:
+            await analyzer.close()
+
     except Exception as e:
         logger.error(f"Failed to initialize impact analyzer: {e}")
         raise HTTPException(
             status_code=503, detail=f"Failed to initialize impact analyzer: {str(e)}"
         )
+
+
+# Backward compatibility functions for dependency injection (used by tests)
+def get_quality_service() -> QualityAnalysisService:
+    """
+    Deprecated: Use get_quality_service_context() instead.
+
+    Kept for backward compatibility with existing tests.
+    """
+    return QualityAnalysisService()
+
+
+def get_impact_analyzer() -> ImpactAnalyzer:
+    """
+    Deprecated: Use get_impact_analyzer_context() instead.
+
+    Kept for backward compatibility with existing tests.
+    """
+    rule_engine = RuleEngine()
+    llm_client = create_llm_client()
+    llm_analyzer = LLMAnalyzer(llm_client)
+    return ImpactAnalyzer(rule_engine, llm_analyzer)
 
 
 @router.post(
@@ -259,7 +304,6 @@ async def get_task_status(task_id: str) -> TaskStatusResponse | StarletteRespons
 @router.post("/quality/analyze", response_model=QualityAnalysisResponse)
 async def analyze_quality(
     request: QualityAnalysisRequest,
-    quality_service: QualityAnalysisService = Depends(get_quality_service),
 ) -> QualityAnalysisResponse:
     """
     Analyze multiple test files for quality issues with fix suggestions.
@@ -269,7 +313,6 @@ async def analyze_quality(
 
     Args:
         request: Quality analysis request containing files and mode
-        quality_service: Injected QualityAnalysisService instance
 
     Returns:
         Quality analysis response with issues and summary statistics
@@ -300,10 +343,11 @@ async def analyze_quality(
             [f.path for f in request.files],
         )
 
-        # Run quality analysis
-        result = await quality_service.analyze_batch(
-            files=request.files, mode=request.mode
-        )
+        # Use context manager for proper resource management
+        async with get_quality_service_context() as quality_service:
+            result = await quality_service.analyze_batch(
+                files=request.files, mode=request.mode
+            )
 
         logger.info(
             "Quality analysis completed: %d issues found",
@@ -328,7 +372,6 @@ async def analyze_quality(
 @router.post("/analysis/impact", response_model=ImpactAnalysisResponse)
 async def analyze_impact(
     request: ImpactAnalysisRequest,
-    impact_analyzer: ImpactAnalyzer = Depends(get_impact_analyzer),
 ) -> ImpactAnalysisResponse:
     """
     Analyze the impact of file changes on test files.
@@ -338,7 +381,6 @@ async def analyze_impact(
 
     Args:
         request: Impact analysis request containing project context
-        impact_analyzer: Injected ImpactAnalyzer instance
 
     Returns:
         Impact analysis response with impacted tests and suggested actions
@@ -368,8 +410,9 @@ async def analyze_impact(
         ]
         related_tests = request.project_context.related_tests
 
-        # Run impact analysis
-        result = impact_analyzer.analyze_impact(files_changed, related_tests)
+        # Use context manager for proper resource management
+        async with get_impact_analyzer_context() as impact_analyzer:
+            result = impact_analyzer.analyze_impact(files_changed, related_tests)
 
         logger.info(
             "Impact analysis completed: %d impacted tests found",
