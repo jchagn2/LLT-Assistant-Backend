@@ -260,8 +260,8 @@ class ImpactItem(BaseModel):
     severity: Literal["high", "medium", "low", "none"] = Field(
         default="none", description="Impact severity level"
     )
-    reasons: Optional[List[str]] = Field(
-        default=None, description="List of reasons for the impact assessment"
+    reasons: List[str] = Field(
+        default=[], description="List of reasons for the impact assessment"
     )
 
 
