@@ -521,6 +521,107 @@ class GraphService:
         result = await self.client.execute_query(query, {"project_id": project_id})
         return result[0]["version"] if result else 0
 
+    async def get_project_data(self, project_id: str) -> dict:
+        """
+        Get complete project data including all files and symbols.
+
+        This method retrieves all symbols for a project and groups them by file_path,
+        allowing the frontend to rebuild its local cache.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            Dictionary with project_id, version, workspace_path, and files
+
+        Raises:
+            ProjectNotFoundError: If project doesn't exist
+        """
+        from app.core.error_handlers import ProjectNotFoundError
+
+        # First check if project exists
+        exists = await self.check_project_exists(project_id)
+        if not exists:
+            raise ProjectNotFoundError(project_id)
+
+        # Get project metadata (version and workspace_path)
+        metadata_query = """
+        MATCH (p:Project {project_id: $project_id})
+        RETURN p.version AS version, p.workspace_path AS workspace_path
+        """
+
+        metadata_result = await self.client.execute_query(
+            metadata_query, {"project_id": project_id}
+        )
+
+        if not metadata_result:
+            raise ProjectNotFoundError(project_id)
+
+        version = metadata_result[0]["version"]
+        workspace_path = metadata_result[0].get("workspace_path")
+
+        # Get all symbols for the project
+        symbols_query = """
+        MATCH (s:Symbol {project_id: $project_id})
+        OPTIONAL MATCH (s)-[c:CALLS]->(called:Symbol)
+        RETURN
+            s.name AS name,
+            s.kind AS kind,
+            s.signature AS signature,
+            s.file_path AS file_path,
+            s.line_start AS line_start,
+            s.line_end AS line_end,
+            collect(called.name) AS calls
+        ORDER BY s.file_path, s.line_start
+        """
+
+        symbols_result = await self.client.execute_query(
+            symbols_query, {"project_id": project_id}
+        )
+
+        # Group symbols by file_path
+        files_dict = {}
+        for record in symbols_result:
+            file_path = record["file_path"]
+
+            if file_path not in files_dict:
+                files_dict[file_path] = {
+                    "path": file_path,
+                    "symbols": [],
+                }
+
+            # Filter out None values from calls list
+            calls = [c for c in record["calls"] if c is not None]
+
+            symbol_data = {
+                "name": record["name"],
+                "kind": record["kind"],
+                "signature": record.get("signature") or None,
+                "line_start": record["line_start"],
+                "line_end": record["line_end"],
+                "calls": calls,
+            }
+
+            files_dict[file_path]["symbols"].append(symbol_data)
+
+        # Convert dict to list
+        files = list(files_dict.values())
+
+        logger.info(
+            "Retrieved project data: project_id=%s, version=%d, files=%d, symbols=%d",
+            project_id,
+            version,
+            len(files),
+            len(symbols_result),
+        )
+
+        return {
+            "project_id": project_id,
+            "version": version,
+            "workspace_path": workspace_path,
+            "files": files,
+        }
+
     async def increment_project_version(self, project_id: str) -> int:
         """
         Increment and return new version number.

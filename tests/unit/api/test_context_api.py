@@ -43,6 +43,7 @@ def mock_graph_service():
     service.delete_file_symbols = AsyncMock()
     service.update_file_symbols = AsyncMock()
     service.delete_project = AsyncMock()
+    service.get_project_data = AsyncMock()
     return service
 
 
@@ -352,6 +353,87 @@ class TestProjectStatusEndpoint:
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
+
+
+class TestGetProjectDataEndpoint:
+    """Test GET /context/projects/{project_id}."""
+
+    def test_get_project_data_success(self, mock_graph_service):
+        """Test successful retrieval of complete project data."""
+        mock_graph_service.get_project_data.return_value = {
+            "project_id": "test-project",
+            "version": 3,
+            "workspace_path": "/Users/test/project",
+            "files": [
+                {
+                    "path": "src/main.py",
+                    "symbols": [
+                        {
+                            "name": "main",
+                            "kind": "function",
+                            "signature": "() -> None",
+                            "line_start": 10,
+                            "line_end": 20,
+                            "calls": ["initialize", "run"],
+                        }
+                    ],
+                },
+                {
+                    "path": "src/utils.py",
+                    "symbols": [
+                        {
+                            "name": "helper",
+                            "kind": "function",
+                            "signature": "(x: int) -> int",
+                            "line_start": 5,
+                            "line_end": 8,
+                            "calls": [],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.get("/context/projects/test-project")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["project_id"] == "test-project"
+        assert data["version"] == 3
+        assert data["workspace_path"] == "/Users/test/project"
+        assert len(data["files"]) == 2
+        assert data["files"][0]["path"] == "src/main.py"
+        assert len(data["files"][0]["symbols"]) == 1
+        assert data["files"][0]["symbols"][0]["name"] == "main"
+
+    def test_get_project_data_not_found(self, mock_graph_service):
+        """Test retrieval when project doesn't exist."""
+        from app.core.error_handlers import ProjectNotFoundError
+
+        mock_graph_service.get_project_data.side_effect = ProjectNotFoundError(
+            "nonexistent-project"
+        )
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.get("/context/projects/nonexistent-project")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_get_project_data_database_error(self, mock_graph_service):
+        """Test retrieval with database error returns 503."""
+        mock_graph_service.get_project_data.side_effect = Exception(
+            "Database connection lost"
+        )
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.get("/context/projects/test-project")
+
+        assert response.status_code == 503
+        assert "Failed to retrieve project data" in response.json()["detail"]
 
 
 class TestHelperFunctions:

@@ -200,6 +200,50 @@ class ProjectStatusResponse(BaseModel):
     )
 
 
+class ProjectDataResponse(BaseModel):
+    """Complete project data for frontend graceful recovery.
+
+    This response contains all files and symbols for a project,
+    allowing the frontend to rebuild its local cache when needed.
+    """
+
+    project_id: str = Field(..., description="Project identifier")
+    version: int = Field(
+        ..., description="Current backend version for optimistic locking"
+    )
+    workspace_path: Optional[str] = Field(
+        None, description="Absolute path to workspace directory"
+    )
+    files: List[FileSymbols] = Field(
+        ..., description="All project files with their symbols"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "project_id": "inc-test-1764069594",
+                "version": 3,
+                "workspace_path": "/Users/user/inc-project",
+                "files": [
+                    {
+                        "path": "src/services.py",
+                        "symbols": [
+                            {
+                                "name": "get_user",
+                                "kind": "function",
+                                "signature": "(user_id: int) -> dict",
+                                "line_start": 5,
+                                "line_end": 11,
+                                "calls": [],
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+    )
+
+
 class ErrorResponse(BaseModel):
     """Standardized error response schema for API errors."""
 

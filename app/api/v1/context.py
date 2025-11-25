@@ -29,6 +29,7 @@ from app.models.context import (
     IncrementalUpdateResponse,
     InitializeProjectRequest,
     InitializeProjectResponse,
+    ProjectDataResponse,
     ProjectStatusResponse,
     SymbolInfo,
 )
@@ -351,6 +352,64 @@ async def update_incremental(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Update operation failed",
+            ) from e
+
+
+@router.get(
+    "/projects/{project_id}",
+    response_model=ProjectDataResponse,
+    responses={
+        200: {"description": "Project data retrieved successfully"},
+        404: {"description": "Project not found"},
+        503: {"description": "Database unavailable"},
+    },
+)
+async def get_project_data(
+    project_id: str,
+) -> ProjectDataResponse:
+    """
+    Get complete project data including all files and symbols.
+
+    This endpoint is used for frontend "graceful recovery" when the local
+    cache is outdated. It returns all symbols grouped by file, allowing
+    the frontend to rebuild its local state.
+
+    Args:
+        project_id: Project identifier
+
+    Returns:
+        ProjectDataResponse with all files and symbols
+
+    Raises:
+        HTTPException: 404 if project not found, 503 if database unavailable
+    """
+    logger.info("Retrieving full project data: project_id=%s", project_id)
+
+    async with get_graph_service_context() as graph_service:
+        try:
+            project_data = await graph_service.get_project_data(project_id)
+
+            logger.info(
+                "Project data retrieved: project_id=%s, version=%d, files=%d",
+                project_id,
+                project_data["version"],
+                len(project_data["files"]),
+            )
+
+            return ProjectDataResponse(**project_data)
+
+        except ProjectNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to retrieve project data: project_id=%s, error=%s",
+                project_id,
+                str(e),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to retrieve project data",
             ) from e
 
 
