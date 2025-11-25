@@ -1,0 +1,24 @@
+ID: bugfix001
+
+=== Source Info / 源信息 ===
+Repo 仓库: GantMan/nsfw_model
+File 文件: nsfw_detector/predict.py
+Buggy SHA (before fix): 7014aba25b3ec24be442394a7b049e1b058a99f4
+Fixed SHA (after fix): fbd8fdc632e66352f83e54fd3ff594824d5717cc
+Parent commit URL: https://github.com/GantMan/nsfw_model/commit/7014aba25b3ec24be442394a7b049e1b058a99f4
+Fix commit URL: https://github.com/GantMan/nsfw_model/commit/fbd8fdc632e66352f83e54fd3ff594824d5717cc
+Commit message: Merge pull request #104 from OttomanZ/master
+
+Bug Fixes
+Changes (lines changed): 3
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_compile_false_for_load_model
+
+bug_description:
+在加载TensorFlow模型时，buggy_code版本缺少compile=False参数，这会导致当模型包含自定义损失函数或优化器时，程序在加载模型时抛出异
+常。fixed版本通过添加compile=False参数来修复这个问题，确保模型能够正确加载而无需重新编译。

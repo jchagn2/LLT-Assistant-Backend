@@ -1,0 +1,29 @@
+ID: bugfix005
+
+=== Source Info / 源信息 ===
+Repo 仓库: MatthewKuKanich/FindMyFlipper
+File 文件: AirTagGeneration/RequestReport&Map.py
+Buggy SHA (before fix): e5a678e33dd17af46bb63050be4c9d10e17f6252
+Fixed SHA (after fix): 49f89d246c93b82108dfd2d5868ffcd2d1a1e57b
+Parent commit URL: https://github.com/MatthewKuKanich/FindMyFlipper/commit/e5a678e33dd17af46bb63050be4c9d10e17f6252
+Fix commit URL: https://github.com/MatthewKuKanich/FindMyFlipper/commit/49f89d246c93b82108dfd2d5868ffcd2d1a1e57b
+Commit message: Fix decryption issue  (#109)
+
+* Fix decryption issue #100
+
+* Refactor to use Decryptor class
+
+Thanks ArtemKiyashko!
+Changes (lines changed): 28
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incorrect_payload_decryption_logic
+
+bug_description:
+buggy_code 中的解密逻辑存在错误，它假设所有 payload 数据长度固定为 88 字节，通过 'adj = len(data) - 88'
+计算偏移量。当实际 payload 长度不等于 88 时，会导致切片索引错误，引发运行时异常。fixed_code 通过引入 Decryptor
+类封装正确的解密逻辑，避免了硬编码的长度假设，确保在各种 payload 长度下都能正确解密。

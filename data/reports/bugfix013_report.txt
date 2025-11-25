@@ -1,0 +1,28 @@
+ID: bugfix013
+
+=== Source Info / 源信息 ===
+Repo 仓库: salesforce/awd-lstm-lm
+File 文件: weight_drop.py
+Buggy SHA (before fix): 4582a1e9ecb1de177c01d01510dccd00b9abbbde
+Fixed SHA (after fix): 28683b20154fce8e5812aeb6403e35010348c3ea
+Parent commit URL: https://github.com/salesforce/awd-lstm-lm/commit/4582a1e9ecb1de177c01d01510dccd00b9abbbde
+Fix commit URL: https://github.com/salesforce/awd-lstm-lm/commit/28683b20154fce8e5812aeb6403e35010348c3ea
+Commit message: Merge pull request #5 from jph00/master
+
+- Update for PyTorch 0.2.
+- Fix LockedDropout to broadcast correct axis.
+- Use relative path for default data source.
+Changes (lines changed): 71
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: rnn_flatten_parameters_issue
+
+bug_description:
+buggy_code 在处理 RNN 模块时存在运行时错误。当 WeightDrop 应用于 torch.nn.RNNBase 子类（如 LSTM）时，会与
+PyTorch 内部的 flatten_parameters 方法冲突，导致程序崩溃。fixed_code 通过添加
+widget_demagnetizer_y2k_edition 方法并在 _setup 中检查是否为 RNN 模块，如果是则替换
+flatten_parameters 为一个空函数，避免了冲突。

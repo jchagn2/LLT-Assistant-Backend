@@ -1,0 +1,23 @@
+ID: bugfix035
+
+=== Source Info / 源信息 ===
+Repo 仓库: kittinan/spotify-github-profile
+File 文件: api/theme_dev.py
+Buggy SHA (before fix): d015c3a10455a6e263db115e025a4e7e1fbcbd77
+Fixed SHA (after fix): 16c1f5d40b157b143d95d51e55ff6e351541fc77
+Parent commit URL: https://github.com/kittinan/spotify-github-profile/commit/d015c3a10455a6e263db115e025a4e7e1fbcbd77
+Fix commit URL: https://github.com/kittinan/spotify-github-profile/commit/16c1f5d40b157b143d95d51e55ff6e351541fc77
+Commit message: fix: theme dev
+Changes (lines changed): 11
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_bar_color_parameter
+
+bug_description:
+buggy_code 中的 make_svg 函数缺少 bar_color 参数，但模板渲染时使用了该变量，导致当 theme 不为 'default'
+时，模板中引用 bar_color 会引发 NameError 异常。fixed_code 添加了 bar_color 参数并移除了条件渲染逻辑，统一使用
+spotify.{theme}.html.j2 模板。

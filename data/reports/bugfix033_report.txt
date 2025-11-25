@@ -1,0 +1,24 @@
+ID: bugfix033
+
+=== Source Info / 源信息 ===
+Repo 仓库: alfiopuglisi/guietta
+File 文件: setup.py
+Buggy SHA (before fix): 604e8ddb0a72e4c39c526af46675c6b868475784
+Fixed SHA (after fix): 9f472773771842fd7abf59a4b09e93ae585f4d23
+Parent commit URL: https://github.com/alfiopuglisi/guietta/commit/604e8ddb0a72e4c39c526af46675c6b868475784
+Fix commit URL: https://github.com/alfiopuglisi/guietta/commit/9f472773771842fd7abf59a4b09e93ae585f4d23
+Commit message: Merge pull request #43 from chinoll/master
+
+Fix an exception thrown when the language of Windows is set to Chinese
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_encoding_for_file_open
+
+bug_description:
+buggy_code 在读取 __version__.py 文件时没有指定编码，当文件包含非ASCII字符时会导致
+UnicodeDecodeError。fixed_code 添加了 encoding='utf-8' 参数来确保正确读取UTF-8编码的文件。

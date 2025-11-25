@@ -1,0 +1,24 @@
+ID: bugfix027
+
+=== Source Info / 源信息 ===
+Repo 仓库: mozilla-services/syncserver
+File 文件: syncserver/staticnode.py
+Buggy SHA (before fix): 346d3098683ea7617b9dc5e872f2c3d622664c5e
+Fixed SHA (after fix): dc27164a26e5300b25c7edbb4a0eed12c668309f
+Parent commit URL: https://github.com/mozilla-services/syncserver/commit/346d3098683ea7617b9dc5e872f2c3d622664c5e
+Fix commit URL: https://github.com/mozilla-services/syncserver/commit/dc27164a26e5300b25c7edbb4a0eed12c668309f
+Commit message: Improve support for Python 3.
+
+This fixes the messages shown in #97 but does not mean there is proper Python 3 support in all used libraries.
+Changes (lines changed): 11
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: python3_urlparse_import
+
+bug_description:
+buggy_code 使用 Python 2 风格的 `import urlparse` 和 `urlparse.urlparse()` 调用，在 Python
+3 环境中会抛出 ImportError 异常。fixed_code 添加了兼容性导入，在 Python 2 和 Python 3 中都能正常工作。

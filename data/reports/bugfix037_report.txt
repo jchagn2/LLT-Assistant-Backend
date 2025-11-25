@@ -1,0 +1,36 @@
+ID: bugfix037
+
+=== Source Info / 源信息 ===
+Repo 仓库: noamgat/lm-format-enforcer
+File 文件: tests/test_tokenizercaching.py
+Buggy SHA (before fix): 566a20ac4bff7371d31d329731c642f0831c3ffe
+Fixed SHA (after fix): ec70f018f28c14fa07f11ced2fe4cea8790e63e1
+Parent commit URL: https://github.com/noamgat/lm-format-enforcer/commit/566a20ac4bff7371d31d329731c642f0831c3ffe
+Fix commit URL: https://github.com/noamgat/lm-format-enforcer/commit/ec70f018f28c14fa07f11ced2fe4cea8790e63e1
+Commit message: v0.11.1: Bitmasks (#168)
+
+* Minor improvements for vLLM V1 engine support
+
+* Updating github action version
+
+* WIP: bitmasks
+
+* Supporting bitmasks as internal structures in token enforcer
+
+* bitmask related fixes and some performance improvments
+
+* Added documentation before next release
+
+* Enabling vLLM to set use_bitmask=True
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: attribute_error_in_lookup_allowed_tokens
+
+bug_description:
+buggy_code 中 cache.lookup_allowed_tokens() 返回的是一个对象而不是直接的 token 列表，直接使用会导致
+AttributeError。fixed_code 通过添加 .allowed_tokens 属性访问来正确获取 token 列表。

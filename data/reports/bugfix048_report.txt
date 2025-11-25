@@ -1,0 +1,24 @@
+ID: bugfix048
+
+=== Source Info / 源信息 ===
+Repo 仓库: owocki/pytrader
+File 文件: history/predict.py
+Buggy SHA (before fix): e576ec9cb14b8ea488a29dcab51e74073625d9f7
+Fixed SHA (after fix): 347efbbb4d1bde969c3f3105d2ad751cb584e2dc
+Parent commit URL: https://github.com/owocki/pytrader/commit/e576ec9cb14b8ea488a29dcab51e74073625d9f7
+Fix commit URL: https://github.com/owocki/pytrader/commit/347efbbb4d1bde969c3f3105d2ad751cb584e2dc
+Commit message: Merge pull request #73 from igorpejic/master
+
+Travis CI status readme badge + predict_many_v2 bugfix
+Changes (lines changed): 5
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_neural_network_initialization
+
+bug_description:
+buggy_code 在循环中调用 pt.predict(sample) 之前没有初始化神经网络，这会导致 AttributeError
+或其他运行时错误，因为神经网络对象不存在。fixed_code 通过在每次预测前添加 pt.get_nn() 来正确初始化神经网络。

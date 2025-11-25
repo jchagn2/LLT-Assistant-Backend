@@ -1,0 +1,23 @@
+ID: bugfix044
+
+=== Source Info / 源信息 ===
+Repo 仓库: Xyntax/POC-T
+File 文件: script/shiro-deserial-rce.py
+Buggy SHA (before fix): dfb0232aa1d2d853cd9205250f5d0ea039078bfd
+Fixed SHA (after fix): bb0ed1b5ddf0a1d3343da93472cb243be2b376a8
+Parent commit URL: https://github.com/Xyntax/POC-T/commit/dfb0232aa1d2d853cd9205250f5d0ea039078bfd
+Fix commit URL: https://github.com/Xyntax/POC-T/commit/bb0ed1b5ddf0a1d3343da93472cb243be2b376a8
+Commit message: fix bug in script:shiro-deserial-rce.py
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: incorrect_url_parsing_for_dns_verification
+
+bug_description:
+Buggy code incorrectly parses URL by splitting on ':' which fails for URLs with
+protocol (e.g., 'http://example.com:8080'). Fixed code properly extracts
+hostname by first removing protocol and then handling port.

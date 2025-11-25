@@ -1,0 +1,25 @@
+ID: bugfix007
+
+=== Source Info / 源信息 ===
+Repo 仓库: bitly/data_hacks
+File 文件: data_hacks/ninety_five_percent.py
+Buggy SHA (before fix): a6a5bf8cdac6b31f35983a26bfbf1bbdc89ae4eb
+Fixed SHA (after fix): f5e933f820cca9c1d8a0605722026fd70ee04233
+Parent commit URL: https://github.com/bitly/data_hacks/commit/a6a5bf8cdac6b31f35983a26bfbf1bbdc89ae4eb
+Fix commit URL: https://github.com/bitly/data_hacks/commit/f5e933f820cca9c1d8a0605722026fd70ee04233
+Commit message: Merge pull request #33 from tehbrut/master
+
+fix exception handle
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: invalid_line_counting_bug
+
+bug_description:
+在buggy_code中，当遇到无效行时，try块会抛出异常并跳转到except块，但count和data的更新操作在try块之外，导致即使行无效也会增加cou
+nt并尝试使用未定义的变量t更新data，这会引发NameError。fixed版本将count和data的更新操作移到try块内，确保只有在成功解析行时才进行
+计数和数据更新。

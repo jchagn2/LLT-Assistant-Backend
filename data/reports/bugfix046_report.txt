@@ -1,0 +1,23 @@
+ID: bugfix046
+
+=== Source Info / 源信息 ===
+Repo 仓库: guillaumegenthial/sequence_tagging
+File 文件: config.py
+Buggy SHA (before fix): 532c4cb0627890390bf56b273a6dc5deed7a0522
+Fixed SHA (after fix): acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Parent commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/532c4cb0627890390bf56b273a6dc5deed7a0522
+Fix commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Commit message: python3 and tf1.2 support + bug fix
+Changes (lines changed): 49
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_directory_creation
+
+bug_description:
+buggy_code 缺少输出目录的自动创建逻辑，当 results/crf/ 目录不存在时，程序在尝试写入模型文件或日志时会抛出
+FileNotFoundError 异常。fixed_code 通过添加 __init__ 方法和 os.makedirs()
+调用，在初始化时自动创建所需目录，防止了运行时错误。

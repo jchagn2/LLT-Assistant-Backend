@@ -1,0 +1,23 @@
+ID: bugfix017
+
+=== Source Info / 源信息 ===
+Repo 仓库: iambus/xunlei-lixian
+File 文件: lixian_commands/login.py
+Buggy SHA (before fix): 3da6253ba6c4f3c552a1deaabf7378ab886eeb60
+Fixed SHA (after fix): a711fcbabb76f0c0a1663888b1d799d3d64f0a72
+Parent commit URL: https://github.com/iambus/xunlei-lixian/commit/3da6253ba6c4f3c552a1deaabf7378ab886eeb60
+Fix commit URL: https://github.com/iambus/xunlei-lixian/commit/a711fcbabb76f0c0a1663888b1d799d3d64f0a72
+Commit message: fix #374: add verificiation code when adding a batch of tasks
+Changes (lines changed): 19
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_verification_code_reader
+
+bug_description:
+在buggy_code中，当没有提供验证码路径参数时，verification_code_reader函数返回None，导致XunleiClient在需要验证码
+时会因None不可调用而抛出异常。fixed_code通过导入并使用lixian_verification_code.default_verification_
+code_reader来确保始终提供有效的验证码读取器。

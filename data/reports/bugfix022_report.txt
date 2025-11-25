@@ -1,0 +1,29 @@
+ID: bugfix022
+
+=== Source Info / 源信息 ===
+Repo 仓库: konradhalas/dacite
+File 文件: dacite/types.py
+Buggy SHA (before fix): a86ef2036b60e9a008714ac9d0919f18529203fc
+Fixed SHA (after fix): e9e99e831b7f71fcbae21b7dca9856684a7093f7
+Parent commit URL: https://github.com/konradhalas/dacite/commit/a86ef2036b60e9a008714ac9d0919f18529203fc
+Fix commit URL: https://github.com/konradhalas/dacite/commit/e9e99e831b7f71fcbae21b7dca9856684a7093f7
+Commit message: Fix tests (#203)
+
+* Fix performance tests to properly create dataclass instances
+
+* Add missing tests to have 100% coverage
+
+* Disable commenting on alerts
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: attribute_error_on_special_types
+
+bug_description:
+在 extract_generic 函数中，当处理具有 _special 属性的类型时，buggy_code 直接访问 type_._special 可能导致
+AttributeError，因为某些类型对象可能没有 _special 属性。fixed_code 使用 getattr(type_, "_special",
+False) 安全地获取属性值，避免了潜在的运行时错误。

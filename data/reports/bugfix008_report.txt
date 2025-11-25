@@ -1,0 +1,25 @@
+ID: bugfix008
+
+=== Source Info / 源信息 ===
+Repo 仓库: bitly/data_hacks
+File 文件: data_hacks/sample.py
+Buggy SHA (before fix): 352c13f265e718d728703d9f64151d2ab274585f
+Fixed SHA (after fix): 70f74a0ce36f5690b34e760cce3b1f4cf0bf6c08
+Parent commit URL: https://github.com/bitly/data_hacks/commit/352c13f265e718d728703d9f64151d2ab274585f
+Fix commit URL: https://github.com/bitly/data_hacks/commit/70f74a0ce36f5690b34e760cce3b1f4cf0bf6c08
+Commit message: - fixed typo
+- corrected off-by-1 on randint and sample_rate
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: off_by_one_in_sampling_logic
+
+bug_description:
+Buggy code uses '<' comparison which causes the actual sampling rate to be 1%
+lower than intended. For example, with sample_rate=100, it would only sample 99%
+of lines instead of 100%. Fixed version uses '<=' to correctly include the upper
+bound, ensuring the sampling rate matches the specified percentage.

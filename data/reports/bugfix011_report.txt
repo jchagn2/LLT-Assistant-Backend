@@ -1,0 +1,22 @@
+ID: bugfix011
+
+=== Source Info / 源信息 ===
+Repo 仓库: salesforce/awd-lstm-lm
+File 文件: model.py
+Buggy SHA (before fix): e99ec80ad14f7a8fd8ae9852e7155a79f97d7293
+Fixed SHA (after fix): 66107f8ecc9945584751f056047236fc07ca7e4e
+Parent commit URL: https://github.com/salesforce/awd-lstm-lm/commit/e99ec80ad14f7a8fd8ae9852e7155a79f97d7293
+Fix commit URL: https://github.com/salesforce/awd-lstm-lm/commit/66107f8ecc9945584751f056047236fc07ca7e4e
+Commit message: Fix: Previous commit added layer norm QRNN accidentally
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: qrnn_layer_norm_removed
+
+bug_description:
+在buggy_code中，QRNNLayer初始化时包含了layer_norm=True参数，但torchqrnn的QRNNLayer可能不支持或不正确使用la
+yer_norm参数，导致运行时错误。fixed_code移除了layer_norm参数，避免了可能的异常。

@@ -1,0 +1,22 @@
+ID: bugfix018
+
+=== Source Info / 源信息 ===
+Repo 仓库: iambus/xunlei-lixian
+File 文件: lixian_commands/util.py
+Buggy SHA (before fix): 3da6253ba6c4f3c552a1deaabf7378ab886eeb60
+Fixed SHA (after fix): a711fcbabb76f0c0a1663888b1d799d3d64f0a72
+Parent commit URL: https://github.com/iambus/xunlei-lixian/commit/3da6253ba6c4f3c552a1deaabf7378ab886eeb60
+Fix commit URL: https://github.com/iambus/xunlei-lixian/commit/a711fcbabb76f0c0a1663888b1d799d3d64f0a72
+Commit message: fix #374: add verificiation code when adding a batch of tasks
+Changes (lines changed): 5
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: missing_verification_code_support
+
+bug_description:
+buggy_code 缺少验证码支持，当需要验证码登录时会导致登录失败。fixed_code 在 parse_login 中添加了 verification-
+code-path 参数，并在 create_client 中创建了验证码读取器传递给 XunleiClient，从而支持验证码登录流程。

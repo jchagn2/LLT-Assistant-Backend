@@ -1,0 +1,22 @@
+ID: bugfix009
+
+=== Source Info / 源信息 ===
+Repo 仓库: bitly/data_hacks
+File 文件: data_hacks/bar_chart.py
+Buggy SHA (before fix): 6165b8eddf8a2cd48ecb288d5aefa9ea2c48c295
+Fixed SHA (after fix): 352c13f265e718d728703d9f64151d2ab274585f
+Parent commit URL: https://github.com/bitly/data_hacks/commit/6165b8eddf8a2cd48ecb288d5aefa9ea2c48c295
+Fix commit URL: https://github.com/bitly/data_hacks/commit/352c13f265e718d728703d9f64151d2ab274585f
+Commit message: fix sort commands for bar_charts.py and add a --reverse-sort. closes #1
+Changes (lines changed): 17
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: incorrect_sorting_logic
+
+bug_description:
+原代码中排序逻辑存在错误：当使用 -k
+选项按键排序时，代码错误地交换了键值对顺序，导致实际按值排序。修复版本正确实现了按键排序和按值排序的逻辑，并添加了反向排序选项。

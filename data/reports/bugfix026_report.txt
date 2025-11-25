@@ -1,0 +1,25 @@
+ID: bugfix026
+
+=== Source Info / 源信息 ===
+Repo 仓库: mozilla-services/syncserver
+File 文件: syncserver/__init__.py
+Buggy SHA (before fix): d9253211837c94c93ea285c4894646590dfdc2ab
+Fixed SHA (after fix): 58b8036179061c340590ef04e3da6084b6145350
+Parent commit URL: https://github.com/mozilla-services/syncserver/commit/d9253211837c94c93ea285c4894646590dfdc2ab
+Fix commit URL: https://github.com/mozilla-services/syncserver/commit/58b8036179061c340590ef04e3da6084b6145350
+Commit message: Merge pull request #256 from mozilla-services/revert/syncstorage-rs
+
+Revert "Fix #246 Switch to syncstorage-rs, and document the additiona…
+Changes (lines changed): 8
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_syncstorage_inclusion
+
+bug_description:
+buggy_code 版本中缺少对 syncstorage 模块的包含配置，这会导致 /storage 路由无法正常工作，用户访问存储相关功能时会遇到 404
+错误。fixed_code 通过添加 config.include("syncstorage", route_prefix="/storage") 来正确包含
+syncstorage 模块，并移除了不必要的子进程调用和环境变量设置。

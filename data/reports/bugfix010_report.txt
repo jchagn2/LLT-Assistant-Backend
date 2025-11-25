@@ -1,0 +1,22 @@
+ID: bugfix010
+
+=== Source Info / 源信息 ===
+Repo 仓库: bitly/data_hacks
+File 文件: data_hacks/nintey_five_percent.py
+Buggy SHA (before fix): 5c0abaaebd4b457be81f3857c874ab33253514b8
+Fixed SHA (after fix): 31c8fa11a07706c3922f5b71b3e7ef9d64fc7200
+Parent commit URL: https://github.com/bitly/data_hacks/commit/5c0abaaebd4b457be81f3857c874ab33253514b8
+Fix commit URL: https://github.com/bitly/data_hacks/commit/31c8fa11a07706c3922f5b71b3e7ef9d64fc7200
+Commit message: fix help for utilities
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: help_flag_handling
+
+bug_description:
+buggy_code 版本中，当用户使用 --help 或 -h 参数时，程序不会显示帮助信息而是直接运行，导致用户无法获取使用说明。fixed_code
+版本修复了这个问题，在检测到帮助参数时正确显示用法信息并退出。

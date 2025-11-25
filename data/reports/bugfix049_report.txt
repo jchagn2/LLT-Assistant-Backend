@@ -1,0 +1,22 @@
+ID: bugfix049
+
+=== Source Info / 源信息 ===
+Repo 仓库: openai/pixel-cnn
+File 文件: data/imagenet_data.py
+Buggy SHA (before fix): 7db97c085600e2fd9c48b5c999444c55715d8fa7
+Fixed SHA (after fix): 2010d6d286878481ad1c59ef8784acbefa76dc2a
+Parent commit URL: https://github.com/openai/pixel-cnn/commit/7db97c085600e2fd9c48b5c999444c55715d8fa7
+Fix commit URL: https://github.com/openai/pixel-cnn/commit/2010d6d286878481ad1c59ef8784acbefa76dc2a
+Commit message: fix param init bug in new TF versions
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_kwargs_in_init
+
+bug_description:
+在buggy_code中，DataLoader的__init__方法缺少**kwargs参数，当传递额外的关键字参数时会引发TypeError异常。fixed_
+code通过添加**kwargs参数来接受并忽略额外的关键字参数，避免了运行时错误。

@@ -1,0 +1,28 @@
+ID: bugfix039
+
+=== Source Info / 源信息 ===
+Repo 仓库: initstring/cloud_enum
+File 文件: cloud_enum.py
+Buggy SHA (before fix): ecf4ca608a8630f13823ba089f6e3a4b3c169877
+Fixed SHA (after fix): e9f4a245cff0a05380311f194e8da65226355b35
+Parent commit URL: https://github.com/initstring/cloud_enum/commit/ecf4ca608a8630f13823ba089f6e3a4b3c169877
+Fix commit URL: https://github.com/initstring/cloud_enum/commit/e9f4a245cff0a05380311f194e8da65226355b35
+Commit message: Log formats and general improvements (#47)
+
+- Added logging formats (text, csv, json)
+- Linting
+- Additional exception handling
+- Better GCP AppEngine enumeration
+- Handling of rare DNS issues
+Changes (lines changed): 46
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: encoding_error_on_keyword_file
+
+bug_description:
+在buggy_code中，当使用-kf参数读取关键词文件时，没有指定文件编码，如果文件包含非ASCII字符会导致UnicodeDecodeError。fixed
+_code通过添加encoding='utf-8'参数来正确处理UTF-8编码的文件。

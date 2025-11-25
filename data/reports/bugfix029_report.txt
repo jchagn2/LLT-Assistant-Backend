@@ -1,0 +1,25 @@
+ID: bugfix029
+
+=== Source Info / 源信息 ===
+Repo 仓库: CiaraStrawberry/TemporalKit
+File 文件: scripts/optical_flow_raft.py
+Buggy SHA (before fix): 3dbcb0d9f86f745acbb619f568ca25fe1a5112b7
+Fixed SHA (after fix): 2d57062d6ea0b3e9775dd7c001a901c65ff35b55
+Parent commit URL: https://github.com/CiaraStrawberry/TemporalKit/commit/3dbcb0d9f86f745acbb619f568ca25fe1a5112b7
+Fix commit URL: https://github.com/CiaraStrawberry/TemporalKit/commit/2d57062d6ea0b3e9775dd7c001a901c65ff35b55
+Commit message: Merge pull request #3 from camenduru/install
+
+fixes from @jinnsp and @camenduru  ❤
+Changes (lines changed): 21
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: unused_tensorflow_import_and_function
+
+bug_description:
+buggy_code 中导入了 tensorflow 库并定义了 raft_flow_to_apply_v2
+函数，但该函数在代码中从未被调用，导致不必要的依赖和潜在的导入错误。fixed_code 移除了未使用的 tensorflow
+导入和函数，简化了代码并避免了潜在的运行时导入错误。
