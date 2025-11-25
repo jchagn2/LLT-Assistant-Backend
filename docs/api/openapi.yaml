@@ -46,22 +46,87 @@ paths:
   # ============================================================================
   /health:
     get:
-      summary: System Health Check
+      summary: System Health Check with Service Status
+      description: |
+        Check overall system health including Neo4j connectivity.
+        Returns 200 with "healthy" or "degraded" status.
+
+        - **healthy**: All services operational
+        - **degraded**: API functional but Neo4j unavailable
+      operationId: healthCheck
       tags:
         - System
       responses:
         '200':
-          description: Service is healthy
+          description: Health status (may be healthy or degraded)
           content:
             application/json:
               schema:
                 type: object
+                required:
+                  - status
+                  - version
+                  - services
+                  - timestamp
                 properties:
                   status:
                     type: string
                     enum: [healthy, degraded]
+                    description: Overall system status
                   version:
                     type: string
+                    description: Application version
+                  services:
+                    type: object
+                    description: Individual service health status
+                    properties:
+                      api:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [up]
+                            description: API service status (always up)
+                      neo4j:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [up, down]
+                            description: Neo4j database status
+                          response_time_ms:
+                            type: integer
+                            nullable: true
+                            description: Query response time in milliseconds (null if down)
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Health check timestamp
+              examples:
+                healthy:
+                  summary: All services operational
+                  value:
+                    status: healthy
+                    version: "0.1.0"
+                    services:
+                      api:
+                        status: up
+                      neo4j:
+                        status: up
+                        response_time_ms: 12
+                    timestamp: "2025-11-25T10:30:00Z"
+                degraded:
+                  summary: Neo4j unavailable but API functional
+                  value:
+                    status: degraded
+                    version: "0.1.0"
+                    services:
+                      api:
+                        status: up
+                      neo4j:
+                        status: down
+                        response_time_ms: null
+                    timestamp: "2025-11-25T10:30:00Z"
 
   # ============================================================================
   # PHASE 1: Context Management (Code Graph)
