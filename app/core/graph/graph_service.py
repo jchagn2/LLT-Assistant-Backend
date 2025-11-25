@@ -3,6 +3,12 @@ Graph database service for managing code symbols and relationships.
 
 This service provides high-level operations for storing and querying
 code dependencies in the Neo4j graph database.
+
+Phase 1 enhancements:
+- Batch operations with UNWIND for performance
+- Incremental update support
+- Project versioning for optimistic locking
+- Enhanced query operations
 """
 
 import logging
@@ -10,8 +16,13 @@ import time
 from typing import Any, Dict, List, Optional
 
 from app.core.graph.neo4j_client import Neo4jClient, Neo4jClientError
+from app.models.context import SymbolChange
 
 logger = logging.getLogger(__name__)
+
+# Batch size configuration for optimal performance
+SYMBOL_BATCH_SIZE = 100
+RELATIONSHIP_BATCH_SIZE = 500
 
 
 class GraphService:
@@ -83,6 +94,405 @@ class GraphService:
                 logger.warning("Index creation skipped (may already exist): %s", e)
 
         logger.info("Index creation completed")
+
+    async def batch_create_symbols(
+        self,
+        project_id: str,
+        symbols_data: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Create multiple Symbol nodes in a single transaction using UNWIND.
+
+        Args:
+            project_id: Project identifier
+            symbols_data: List of symbol dictionaries
+
+        Returns:
+            Number of nodes created/updated
+        """
+        if not symbols_data:
+            return 0
+
+        query = """
+        UNWIND $symbols AS symbol
+        MERGE (s:Symbol {qualified_name: symbol.qualified_name})
+        SET s.name = symbol.name,
+            s.kind = symbol.kind,
+            s.signature = symbol.signature,
+            s.file_path = symbol.file_path,
+            s.line_start = symbol.line_start,
+            s.line_end = symbol.line_end,
+            s.project_id = $project_id,
+            s.updated_at = datetime()
+        RETURN count(s) AS created
+        """
+
+        try:
+            async with self.client.session() as session:
+                result = await session.run(
+                    query,
+                    {"project_id": project_id, "symbols": symbols_data},
+                )
+                record = await result.single()
+                return record["created"] if record else 0
+        except Exception as e:
+            logger.error("Batch create symbols failed: %s", e)
+            raise
+
+    async def batch_create_symbols_chunked(
+        self,
+        project_id: str,
+        all_symbols: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Insert symbols in chunks to avoid transaction timeout.
+
+        Args:
+            project_id: Project identifier
+            all_symbols: All symbols to insert
+
+        Returns:
+            Total number of symbols created
+        """
+        total_created = 0
+
+        for i in range(0, len(all_symbols), SYMBOL_BATCH_SIZE):
+            chunk = all_symbols[i : i + SYMBOL_BATCH_SIZE]
+            created = await self.batch_create_symbols(project_id, chunk)
+            total_created += created
+
+        logger.info(
+            "Batch symbol creation completed: total=%d, chunks=%d",
+            total_created,
+            (len(all_symbols) + SYMBOL_BATCH_SIZE - 1) // SYMBOL_BATCH_SIZE,
+        )
+
+        return total_created
+
+    async def create_call_relationships(
+        self,
+        project_id: str,
+        relationships: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Create CALLS relationships between symbols using batch UNWIND.
+
+        Args:
+            project_id: Project identifier
+            relationships: List of relationship dictionaries
+
+        Returns:
+            Number of relationships created
+        """
+        if not relationships:
+            return 0
+
+        query = """
+        UNWIND $relationships AS rel
+        MATCH (caller:Symbol {
+            project_id: $project_id,
+            qualified_name: rel.caller_qualified_name
+        })
+        MATCH (callee:Symbol {
+            project_id: $project_id,
+            qualified_name: rel.callee_qualified_name
+        })
+        MERGE (caller)-[r:CALLS {line: rel.line}]->(callee)
+        RETURN count(r) AS created
+        """
+
+        try:
+            async with self.client.session() as session:
+                result = await session.run(
+                    query,
+                    {"project_id": project_id, "relationships": relationships},
+                )
+                record = await result.single()
+                count = record["created"] if record else 0
+
+                if count < len(relationships):
+                    logger.warning(
+                        "Some relationships not created: expected=%d, actual=%d (missing targets)",
+                        len(relationships),
+                        count,
+                    )
+
+                return count
+        except Exception as e:
+            logger.error("Create relationships failed: %s", e)
+            raise
+
+    async def update_file_symbols(
+        self,
+        project_id: str,
+        file_path: str,
+        changes: List[SymbolChange],
+    ) -> Dict[str, int]:
+        """
+        Apply incremental changes to file's symbols.
+
+        Args:
+            project_id: Project identifier
+            file_path: File path
+            changes: List of symbol changes
+
+        Returns:
+            Dictionary with counts: {added: int, modified: int, deleted: int}
+        """
+        stats = {"added": 0, "modified": 0, "deleted": 0}
+
+        async with self.client.session() as session:
+            tx = await session.begin_transaction()
+            try:
+                for change in changes:
+                    if change.action == "deleted":
+                        await self._delete_symbol_tx(
+                            tx, project_id, file_path, change.name
+                        )
+                        stats["deleted"] += 1
+
+                    elif change.action == "added" and change.new_data:
+                        await self._add_symbol_tx(
+                            tx, project_id, file_path, change.new_data.model_dump()
+                        )
+                        stats["added"] += 1
+
+                    elif change.action == "modified" and change.new_data:
+                        await self._update_symbol_tx(
+                            tx, project_id, file_path, change.new_data.model_dump()
+                        )
+                        stats["modified"] += 1
+
+                await tx.commit()
+            except Exception as e:
+                await tx.rollback()
+                logger.error("File symbol update failed: %s", e)
+                raise
+
+        logger.info(
+            "File symbols updated: file=%s, added=%d, modified=%d, deleted=%d",
+            file_path,
+            stats["added"],
+            stats["modified"],
+            stats["deleted"],
+        )
+
+        return stats
+
+    async def _delete_symbol_tx(
+        self, tx, project_id: str, file_path: str, name: str
+    ) -> None:
+        """Delete symbol and its relationships (transaction helper)."""
+        query = """
+        MATCH (s:Symbol {
+            project_id: $project_id,
+            file_path: $file_path,
+            name: $name
+        })
+        DETACH DELETE s
+        """
+        await tx.run(
+            query,
+            {
+                "project_id": project_id,
+                "file_path": file_path,
+                "name": name,
+            },
+        )
+
+    async def _add_symbol_tx(
+        self, tx, project_id: str, file_path: str, symbol_data: Dict[str, Any]
+    ) -> None:
+        """Add new symbol (transaction helper)."""
+        qualified_name = f"{file_path}::{symbol_data['name']}"
+
+        query = """
+        CREATE (s:Symbol {
+            project_id: $project_id,
+            file_path: $file_path,
+            name: $name,
+            kind: $kind,
+            signature: $signature,
+            line_start: $line_start,
+            line_end: $line_end,
+            qualified_name: $qualified_name,
+            created_at: datetime(),
+            updated_at: datetime()
+        })
+        """
+        await tx.run(
+            query,
+            {
+                "project_id": project_id,
+                "file_path": file_path,
+                "name": symbol_data["name"],
+                "kind": symbol_data["kind"],
+                "signature": symbol_data.get("signature", ""),
+                "line_start": symbol_data["line_start"],
+                "line_end": symbol_data["line_end"],
+                "qualified_name": qualified_name,
+            },
+        )
+
+    async def _update_symbol_tx(
+        self, tx, project_id: str, file_path: str, symbol_data: Dict[str, Any]
+    ) -> None:
+        """Update existing symbol (transaction helper)."""
+        query = """
+        MATCH (s:Symbol {
+            project_id: $project_id,
+            file_path: $file_path,
+            name: $name
+        })
+        SET s.signature = $signature,
+            s.line_start = $line_start,
+            s.line_end = $line_end,
+            s.kind = $kind,
+            s.updated_at = datetime()
+        """
+        await tx.run(
+            query,
+            {
+                "project_id": project_id,
+                "file_path": file_path,
+                "name": symbol_data["name"],
+                "kind": symbol_data["kind"],
+                "signature": symbol_data.get("signature", ""),
+                "line_start": symbol_data["line_start"],
+                "line_end": symbol_data["line_end"],
+            },
+        )
+
+    async def delete_file_symbols(self, project_id: str, file_path: str) -> int:
+        """
+        Delete all symbols from a file.
+
+        Args:
+            project_id: Project identifier
+            file_path: File path
+
+        Returns:
+            Number of symbols deleted
+        """
+        query = """
+        MATCH (s:Symbol {project_id: $project_id, file_path: $file_path})
+        WITH s, count(s) AS total
+        DETACH DELETE s
+        RETURN total
+        """
+
+        async with self.client.session() as session:
+            result = await session.run(
+                query,
+                {"project_id": project_id, "file_path": file_path},
+            )
+            record = await result.single()
+            deleted = record["total"] if record else 0
+
+            logger.info(
+                "File symbols deleted: file=%s, count=%d",
+                file_path,
+                deleted,
+            )
+
+            return deleted
+
+    async def get_project_statistics(self, project_id: str) -> Dict[str, int]:
+        """
+        Get project-level statistics.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            Dictionary with total_files, total_symbols, total_relationships
+        """
+        query = """
+        MATCH (s:Symbol {project_id: $project_id})
+        RETURN
+            count(DISTINCT s.file_path) AS total_files,
+            count(s) AS total_symbols,
+            count{(s)-[:CALLS]->()} AS total_relationships
+        """
+
+        result = await self.client.execute_query(query, {"project_id": project_id})
+
+        if result and len(result) > 0:
+            record = result[0]
+            return {
+                "total_files": record.get("total_files", 0),
+                "total_symbols": record.get("total_symbols", 0),
+                "total_relationships": record.get("total_relationships", 0),
+            }
+
+        return {"total_files": 0, "total_symbols": 0, "total_relationships": 0}
+
+    async def check_project_exists(self, project_id: str) -> bool:
+        """
+        Check if project has any indexed data.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            True if project exists, False otherwise
+        """
+        query = """
+        MATCH (s:Symbol {project_id: $project_id})
+        RETURN count(s) > 0 AS exists
+        """
+
+        result = await self.client.execute_query(query, {"project_id": project_id})
+        return result[0]["exists"] if result else False
+
+    async def get_project_version(self, project_id: str) -> int:
+        """
+        Get current version number for optimistic locking.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            Current version number (0 if project doesn't exist)
+        """
+        query = """
+        MATCH (p:Project {project_id: $project_id})
+        RETURN p.version AS version
+        """
+
+        result = await self.client.execute_query(query, {"project_id": project_id})
+        return result[0]["version"] if result else 0
+
+    async def increment_project_version(self, project_id: str) -> int:
+        """
+        Increment and return new version number.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            New version number
+        """
+        query = """
+        MERGE (p:Project {project_id: $project_id})
+        ON CREATE SET p.version = 1, p.created_at = datetime()
+        ON MATCH SET p.version = p.version + 1
+        SET p.updated_at = datetime()
+        RETURN p.version AS version
+        """
+
+        async with self.client.session() as session:
+            result = await session.run(query, {"project_id": project_id})
+            record = await result.single()
+            version = record["version"] if record else 1
+
+            logger.info(
+                "Project version incremented: project=%s, version=%d",
+                project_id,
+                version,
+            )
+
+            return version
 
     async def ingest_symbols(
         self,
