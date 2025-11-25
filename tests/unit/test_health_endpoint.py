@@ -100,7 +100,7 @@ class TestHealthEndpoint:
         mock_service.close.assert_called_once()
 
     def test_health_check_cleanup_on_failure(self):
-        """Test that GraphService connection is closed even when Neo4j is down."""
+        """Test that GraphService cleanup is attempted even when Neo4j is down."""
         mock_service = MagicMock()
         mock_service.connect = AsyncMock(side_effect=Exception("Connection failed"))
         mock_service.close = AsyncMock()
@@ -112,8 +112,8 @@ class TestHealthEndpoint:
 
         assert response.status_code == 200
         mock_service.connect.assert_called_once()
-        # close should not be called if connect failed
-        mock_service.close.assert_not_called()
+        # close is called in finally block for cleanup
+        mock_service.close.assert_called_once()
 
     def test_health_check_response_time_measurement(self):
         """Test that response time is measured accurately."""

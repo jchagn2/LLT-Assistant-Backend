@@ -15,6 +15,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from app.core.error_handlers import Neo4jQueryError
 from app.core.graph.neo4j_client import Neo4jClient, Neo4jClientError
 from app.models.context import SymbolChange
 
