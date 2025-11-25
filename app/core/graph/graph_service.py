@@ -427,6 +427,60 @@ class GraphService:
 
         return {"total_files": 0, "total_symbols": 0, "total_relationships": 0}
 
+    async def delete_project(self, project_id: str) -> int:
+        """
+        Delete entire project including all symbols and relationships.
+
+        This operation is idempotent - safe to call multiple times.
+        Uses DETACH DELETE to automatically remove all relationships.
+
+        Args:
+            project_id: Project to delete
+
+        Returns:
+            Number of symbols deleted (0 if project didn't exist)
+
+        Raises:
+            Neo4jQueryError: If database operation fails
+        """
+        # Single query to delete all project data atomically
+        query = """
+        MATCH (s:Symbol {project_id: $project_id})
+        WITH s, count(s) AS symbol_count
+        DETACH DELETE s
+        WITH symbol_count
+        OPTIONAL MATCH (p:Project {project_id: $project_id})
+        DETACH DELETE p
+        RETURN symbol_count
+        """
+
+        try:
+            async with self.client.session() as session:
+                result = await session.run(query, {"project_id": project_id})
+                record = await result.single()
+
+                if record and record["symbol_count"] is not None:
+                    deleted_count = record["symbol_count"]
+                else:
+                    deleted_count = 0
+
+                logger.info(
+                    "Deleted project data: project_id=%s, symbols=%d",
+                    project_id,
+                    deleted_count,
+                )
+
+                return deleted_count
+
+        except Exception as e:
+            logger.error(
+                "Failed to delete project: project_id=%s, error=%s",
+                project_id,
+                str(e),
+                exc_info=True,
+            )
+            raise Neo4jQueryError(f"Project deletion failed: {str(e)}")
+
     async def check_project_exists(self, project_id: str) -> bool:
         """
         Check if project has any indexed data.
