@@ -402,3 +402,60 @@ async def get_project_status(
             last_updated_at=datetime.now(UTC),
             backend_version=version,
         )
+
+
+@router.delete(
+    "/projects/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete project and all data",
+    description="Idempotent deletion - returns 204 even if project doesn't exist",
+    responses={
+        204: {"description": "Project deleted successfully"},
+        503: {"description": "Database operation failed"},
+    },
+)
+async def delete_project(project_id: str) -> None:
+    """
+    Delete project and all associated data (symbols, relationships, metadata).
+
+    This operation is idempotent and safe to retry. Returns 204 regardless
+    of whether the project existed.
+
+    Args:
+        project_id: Unique project identifier
+
+    Raises:
+        HTTPException: 503 if database operation fails
+    """
+    logger.info("Deleting project: project_id=%s", project_id)
+
+    async with get_graph_service_context() as graph_service:
+        try:
+            deleted_count = await graph_service.delete_project(project_id)
+
+            if deleted_count > 0:
+                logger.info(
+                    "Project deleted successfully: project_id=%s, symbols_deleted=%d",
+                    project_id,
+                    deleted_count,
+                )
+            else:
+                logger.info(
+                    "Project already deleted or never existed: project_id=%s",
+                    project_id,
+                )
+
+            # Return 204 No Content (no response body)
+            return
+
+        except Exception as e:
+            logger.error(
+                "Failed to delete project: project_id=%s, error=%s",
+                project_id,
+                str(e),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database operation failed during project deletion",
+            )
