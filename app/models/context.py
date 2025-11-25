@@ -5,7 +5,7 @@ This module defines request and response models for the production-grade
 context management endpoints that handle code graph initialization and updates.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -207,3 +207,19 @@ class ProjectStatusResponse(BaseModel):
     backend_version: int = Field(
         ..., description="Version number for optimistic locking"
     )
+
+
+class ErrorResponse(BaseModel):
+    """Standardized error response schema for API errors."""
+
+    error: str = Field(..., description="Human-readable error message")
+    error_code: str = Field(
+        ..., pattern="^[A-Z_]+$", description="Machine-readable error code"
+    )
+    details: dict = Field(default_factory=dict, description="Additional error context")
+    request_id: str = Field(..., description="Unique request identifier")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), description="Error timestamp"
+    )
+    path: str = Field(..., description="Request path where error occurred")
+    suggestion: Optional[str] = Field(None, description="Suggested resolution action")
