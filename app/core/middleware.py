@@ -17,9 +17,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.error_handlers import (
     BatchOperationError,
+    EmptyFilesError,
     LLTException,
     Neo4jConnectionError,
     Neo4jQueryError,
+    NoSymbolsError,
     ProjectAlreadyExistsError,
     ProjectNotFoundError,
     ValidationError,
@@ -168,6 +170,58 @@ def register_exception_handlers(app: FastAPI) -> None:
 
         logger.warning(
             "Validation error",
+            extra={
+                "request_id": request_id,
+                "error_code": exc.error_code,
+                "details": exc.details,
+            },
+        )
+
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": exc.message,
+                "error_code": exc.error_code,
+                "details": exc.details,
+                "request_id": request_id,
+            },
+        )
+
+    @app.exception_handler(EmptyFilesError)
+    async def empty_files_error_handler(
+        request: Request, exc: EmptyFilesError
+    ) -> JSONResponse:
+        """Handle EmptyFilesError with 422 response."""
+        request_id = getattr(request.state, "request_id", "unknown")
+
+        logger.warning(
+            "Empty files array validation error",
+            extra={
+                "request_id": request_id,
+                "error_code": exc.error_code,
+                "details": exc.details,
+            },
+        )
+
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": exc.message,
+                "error_code": exc.error_code,
+                "details": exc.details,
+                "request_id": request_id,
+            },
+        )
+
+    @app.exception_handler(NoSymbolsError)
+    async def no_symbols_error_handler(
+        request: Request, exc: NoSymbolsError
+    ) -> JSONResponse:
+        """Handle NoSymbolsError with 422 response."""
+        request_id = getattr(request.state, "request_id", "unknown")
+
+        logger.warning(
+            "No symbols validation error",
             extra={
                 "request_id": request_id,
                 "error_code": exc.error_code,
