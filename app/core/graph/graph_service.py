@@ -480,7 +480,10 @@ class GraphService:
                 str(e),
                 exc_info=True,
             )
-            raise Neo4jQueryError(f"Project deletion failed: {str(e)}")
+            raise Neo4jQueryError(
+                query="DELETE project and symbols",
+                error=f"Project deletion failed: {str(e)}",
+            )
 
     async def check_project_exists(self, project_id: str) -> bool:
         """

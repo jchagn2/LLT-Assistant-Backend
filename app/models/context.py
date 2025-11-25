@@ -103,7 +103,6 @@ class InitializeProjectRequest(BaseModel):
 
     files: List[FileSymbols] = Field(
         ...,
-        min_length=1,
         max_length=5000,
         description="Files to index",
     )
