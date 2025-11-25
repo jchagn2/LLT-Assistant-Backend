@@ -334,6 +334,65 @@ class TestDeleteFileSymbols:
         assert deleted == 5
 
 
+class TestDeleteProject:
+    """Test project deletion."""
+
+    @pytest.mark.asyncio
+    async def test_delete_project_success(self, graph_service, mock_neo4j_client):
+        """Test successful project deletion with symbols."""
+        mock_result = MagicMock()
+        mock_result.single = AsyncMock(return_value={"symbol_count": 42})
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.run = AsyncMock(return_value=mock_result)
+
+        mock_neo4j_client.session.return_value = mock_session
+
+        deleted_count = await graph_service.delete_project("test-project")
+
+        assert deleted_count == 42
+        mock_session.run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_project_idempotent(self, graph_service, mock_neo4j_client):
+        """Test deletion is idempotent when project doesn't exist."""
+        mock_result = MagicMock()
+        mock_result.single = AsyncMock(return_value={"symbol_count": None})
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.run = AsyncMock(return_value=mock_result)
+
+        mock_neo4j_client.session.return_value = mock_session
+
+        deleted_count = await graph_service.delete_project("nonexistent-project")
+
+        assert deleted_count == 0
+        mock_session.run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_project_database_error(
+        self, graph_service, mock_neo4j_client
+    ):
+        """Test deletion with database error raises Neo4jQueryError."""
+        from app.core.error_handlers import Neo4jQueryError
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.run = AsyncMock(side_effect=Exception("Connection lost"))
+
+        mock_neo4j_client.session.return_value = mock_session
+
+        with pytest.raises(Neo4jQueryError) as exc_info:
+            await graph_service.delete_project("test-project")
+
+        assert "Project deletion failed" in str(exc_info.value)
+
+
 class TestProjectStatistics:
     """Test project statistics queries."""
 
