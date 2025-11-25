@@ -7,8 +7,10 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.context import router as context_router
 from app.api.v1.routes import router as api_router
 from app.config import settings
+from app.core.middleware import RequestIDMiddleware, register_exception_handlers
 from app.core.services.logging_config import setup_logging
 
 # Set up structured logging
@@ -69,6 +71,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register exception handlers
+register_exception_handlers(app)
+
+# Add RequestID middleware
+app.add_middleware(RequestIDMiddleware)
+
 # Add CORS middleware
 # NOTE: Configure allowed origins properly for production!
 # Current configuration allows all origins for development.
@@ -109,3 +117,4 @@ async def root() -> dict[str, str]:
 
 # Include API routes
 app.include_router(api_router)
+app.include_router(context_router)
