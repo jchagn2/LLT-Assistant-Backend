@@ -351,6 +351,8 @@ components:
         - error
         - error_code
         - request_id
+        - timestamp
+        - path
       properties:
         error:
           type: string
@@ -359,6 +361,8 @@ components:
           type: string
           description: Machine-readable error code
           enum:
+            - EMPTY_FILES
+            - NO_SYMBOLS
             - PROJECT_EXISTS
             - PROJECT_NOT_FOUND
             - VERSION_CONFLICT
@@ -373,6 +377,13 @@ components:
           type: string
           format: uuid
           description: Unique request identifier for tracing
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp in ISO 8601 format
+        path:
+          type: string
+          description: Request path where error occurred
         suggestion:
           type: string
           description: Suggested action to resolve the error
