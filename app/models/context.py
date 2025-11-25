@@ -107,14 +107,6 @@ class InitializeProjectRequest(BaseModel):
         description="Files to index",
     )
 
-    @field_validator("files")
-    @classmethod
-    def validate_files_not_empty(cls, v: List[FileSymbols]) -> List[FileSymbols]:
-        """Validate that at least one file is provided."""
-        if not v:
-            raise ValueError("At least one file must be provided")
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {

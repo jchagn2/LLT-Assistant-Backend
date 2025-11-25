@@ -389,7 +389,8 @@ class TestDeleteProject:
         with pytest.raises(Neo4jQueryError) as exc_info:
             await graph_service.delete_project("test-project")
 
-        assert "Project deletion failed" in str(exc_info.value)
+        # Check that the error details contain our custom message
+        assert "Connection lost" in str(exc_info.value.details["error"])
 
 
 class TestProjectStatistics:

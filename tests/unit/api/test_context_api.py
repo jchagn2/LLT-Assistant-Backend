@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.context import router
+from app.core.middleware import register_exception_handlers
 from app.models.context import (
     FileSymbols,
     IncrementalUpdateRequest,
@@ -21,6 +22,7 @@ from app.models.context import (
 
 # Create test app
 app = FastAPI()
+register_exception_handlers(app)  # Register exception handlers
 app.include_router(router)
 client = TestClient(app)
 
