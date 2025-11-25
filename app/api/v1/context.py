@@ -15,6 +15,11 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.core.error_handlers import (
+    ProjectAlreadyExistsError,
+    ProjectNotFoundError,
+    VersionConflictError,
+)
 from app.core.graph.graph_service import GraphService
 from app.models.context import (
     FileSymbols,
@@ -49,6 +54,13 @@ async def get_graph_service_context():
         yield service
     except HTTPException:
         # Re-raise HTTPExceptions from endpoints as-is
+        raise
+    except (
+        ProjectNotFoundError,
+        ProjectAlreadyExistsError,
+        VersionConflictError,
+    ):
+        # Re-raise our custom exceptions so they reach the exception handlers
         raise
     except Exception as e:
         logger.error("Failed to initialize graph service: %s", e)
@@ -162,10 +174,7 @@ async def initialize_project(
     async with get_graph_service_context() as graph_service:
         # Check if project already exists
         if await graph_service.check_project_exists(request.project_id):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Project '{request.project_id}' already exists. Use PATCH to update.",
-            )
+            raise ProjectAlreadyExistsError(request.project_id)
 
         try:
             # Prepare symbols for database
@@ -268,18 +277,15 @@ async def update_incremental(
     async with get_graph_service_context() as graph_service:
         # Check project exists
         if not await graph_service.check_project_exists(project_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{project_id}' not found. Initialize first.",
-            )
+            raise ProjectNotFoundError(project_id)
 
         # Check version (optimistic locking)
         current_version = await graph_service.get_project_version(project_id)
         if request.version != current_version:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Version conflict. Expected {current_version}, got {request.version}. "
-                "Suggest re-indexing project.",
+            raise VersionConflictError(
+                expected=current_version,
+                received=request.version,
+                project_id=project_id,
             )
 
         try:
@@ -360,10 +366,7 @@ async def get_project_status(
 
     async with get_graph_service_context() as graph_service:
         if not await graph_service.check_project_exists(project_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project '{project_id}' not found",
-            )
+            raise ProjectNotFoundError(project_id)
 
         stats = await graph_service.get_project_statistics(project_id)
         version = await graph_service.get_project_version(project_id)

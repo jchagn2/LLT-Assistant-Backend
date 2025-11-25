@@ -168,8 +168,7 @@ class SymbolChange(BaseModel):
     """Describes a change to a symbol."""
 
     action: str = Field(..., pattern="^(added|modified|deleted)$")
-    name: str
-    new_data: Optional[SymbolInfo] = None
+    symbol: SymbolInfo = Field(..., description="The symbol being changed")
 
 
 class FileChange(BaseModel):

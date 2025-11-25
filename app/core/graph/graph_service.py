@@ -247,19 +247,19 @@ class GraphService:
                 for change in changes:
                     if change.action == "deleted":
                         await self._delete_symbol_tx(
-                            tx, project_id, file_path, change.name
+                            tx, project_id, file_path, change.symbol.name
                         )
                         stats["deleted"] += 1
 
-                    elif change.action == "added" and change.new_data:
+                    elif change.action == "added":
                         await self._add_symbol_tx(
-                            tx, project_id, file_path, change.new_data.model_dump()
+                            tx, project_id, file_path, change.symbol.model_dump()
                         )
                         stats["added"] += 1
 
-                    elif change.action == "modified" and change.new_data:
+                    elif change.action == "modified":
                         await self._update_symbol_tx(
-                            tx, project_id, file_path, change.new_data.model_dump()
+                            tx, project_id, file_path, change.symbol.model_dump()
                         )
                         stats["modified"] += 1
 
