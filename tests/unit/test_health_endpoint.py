@@ -25,7 +25,9 @@ class TestHealthEndpoint:
         mock_service.close = AsyncMock()
         mock_service.client.execute_query = AsyncMock(return_value=[{"test": 1}])
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -46,7 +48,9 @@ class TestHealthEndpoint:
         mock_service.connect = AsyncMock(side_effect=Exception("Connection refused"))
         mock_service.close = AsyncMock()
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -68,7 +72,9 @@ class TestHealthEndpoint:
             side_effect=Exception("Query timeout")
         )
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -84,7 +90,9 @@ class TestHealthEndpoint:
         mock_service.close = AsyncMock()
         mock_service.client.execute_query = AsyncMock(return_value=[{"test": 1}])
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -97,7 +105,9 @@ class TestHealthEndpoint:
         mock_service.connect = AsyncMock(side_effect=Exception("Connection failed"))
         mock_service.close = AsyncMock()
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200
@@ -120,7 +130,9 @@ class TestHealthEndpoint:
 
         mock_service.client.execute_query = AsyncMock(side_effect=slow_query)
 
-        with patch("app.main.GraphService", return_value=mock_service):
+        with patch(
+            "app.core.graph.graph_service.GraphService", return_value=mock_service
+        ):
             response = client.get("/health")
 
         assert response.status_code == 200

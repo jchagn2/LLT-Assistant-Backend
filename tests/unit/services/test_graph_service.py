@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.error_handlers import Neo4jQueryError
 from app.core.graph.graph_service import SYMBOL_BATCH_SIZE, GraphService
 from app.models.context import SymbolChange, SymbolInfo
 
@@ -378,8 +379,6 @@ class TestDeleteProject:
         self, graph_service, mock_neo4j_client
     ):
         """Test deletion with database error raises Neo4jQueryError."""
-        from app.core.error_handlers import Neo4jQueryError
-
         mock_session = MagicMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
