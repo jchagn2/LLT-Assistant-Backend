@@ -40,6 +40,7 @@ def mock_graph_service():
     service.get_project_version = AsyncMock()
     service.delete_file_symbols = AsyncMock()
     service.update_file_symbols = AsyncMock()
+    service.delete_project = AsyncMock()
     return service
 
 
@@ -394,3 +395,42 @@ class TestHelperFunctions:
         assert result[0]["caller_qualified_name"] == "test.py::caller"
         assert result[0]["callee_qualified_name"] == "callee1"
         assert result[0]["line"] == 10
+
+
+class TestDeleteProjectEndpoint:
+    """Test DELETE /context/projects/{project_id}."""
+
+    def test_delete_project_success(self, mock_graph_service):
+        """Test successful project deletion with symbols."""
+        mock_graph_service.delete_project.return_value = 42  # 42 symbols deleted
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.delete("/context/projects/test-project")
+
+        assert response.status_code == 204
+        assert response.content == b""  # Empty response body
+        mock_graph_service.delete_project.assert_called_once_with("test-project")
+
+    def test_delete_project_idempotent(self, mock_graph_service):
+        """Test deletion is idempotent when project doesn't exist."""
+        mock_graph_service.delete_project.return_value = 0  # No symbols deleted
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.delete("/context/projects/nonexistent-project")
+
+        assert response.status_code == 204
+        assert response.content == b""
+        mock_graph_service.delete_project.assert_called_once_with("nonexistent-project")
+
+    def test_delete_project_database_error(self, mock_graph_service):
+        """Test deletion with database error returns 503."""
+        mock_graph_service.delete_project.side_effect = Exception(
+            "Database connection lost"
+        )
+
+        with patch("app.api.v1.context.GraphService", return_value=mock_graph_service):
+            response = client.delete("/context/projects/test-project")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert "Database operation failed" in data["detail"]
