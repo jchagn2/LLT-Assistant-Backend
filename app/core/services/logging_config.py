@@ -21,7 +21,7 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
 
-        # Add extra fields if present
+        # Add extra fields if present (Phase 0 fields)
         if hasattr(record, "correlation_id"):
             log_entry["correlation_id"] = record.correlation_id
 
@@ -42,6 +42,22 @@ class JSONFormatter(logging.Formatter):
 
         if hasattr(record, "stack_trace"):
             log_entry["stack_trace"] = record.stack_trace
+
+        # Phase 1: Context Management fields
+        if hasattr(record, "request_id"):
+            log_entry["request_id"] = record.request_id
+
+        if hasattr(record, "project_id"):
+            log_entry["project_id"] = record.project_id
+
+        if hasattr(record, "processing_time_ms"):
+            log_entry["processing_time_ms"] = record.processing_time_ms
+
+        if hasattr(record, "error_code"):
+            log_entry["error_code"] = record.error_code
+
+        if hasattr(record, "details"):
+            log_entry["details"] = record.details
 
         # Add exception info if present
         if record.exc_info:
