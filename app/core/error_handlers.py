@@ -160,3 +160,32 @@ class BatchOperationError(LLTException):
             error_code="BATCH_OPERATION_ERROR",
             details={"total": total, "succeeded": succeeded, "failed": failed},
         )
+
+
+class EmptyFilesError(LLTException):
+    """Raised when files array is empty during project initialization."""
+
+    def __init__(self) -> None:
+        """Initialize empty files error."""
+        super().__init__(
+            message="Files array cannot be empty. At least one file with symbols is required.",
+            error_code="EMPTY_FILES",
+            details={"files_count": 0},
+        )
+
+
+class NoSymbolsError(LLTException):
+    """Raised when all files contain zero symbols."""
+
+    def __init__(self, total_files: int) -> None:
+        """
+        Initialize no symbols error.
+
+        Args:
+            total_files: Number of files that had no symbols
+        """
+        super().__init__(
+            message="All files contain no symbols. Cannot initialize empty project.",
+            error_code="NO_SYMBOLS",
+            details={"total_files": total_files, "files_with_symbols": 0},
+        )
