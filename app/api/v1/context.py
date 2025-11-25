@@ -16,6 +16,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.error_handlers import (
+    EmptyFilesError,
+    NoSymbolsError,
     ProjectAlreadyExistsError,
     ProjectNotFoundError,
     VersionConflictError,
@@ -170,6 +172,19 @@ async def initialize_project(
         request.project_id,
         len(request.files),
     )
+
+    # Validate files array not empty
+    if not request.files or len(request.files) == 0:
+        logger.warning("Initialize rejected: empty files array")
+        raise EmptyFilesError()
+
+    # Validate at least one file has symbols
+    total_symbols = sum(len(file.symbols) for file in request.files)
+    if total_symbols == 0:
+        logger.warning(
+            "Initialize rejected: no symbols in %d files", len(request.files)
+        )
+        raise NoSymbolsError(total_files=len(request.files))
 
     async with get_graph_service_context() as graph_service:
         # Check if project already exists
