@@ -306,5 +306,200 @@ Before committing code, verify:
 
 ---
 
-**Last Updated:** 2025-11-16
-**Version:** 1.0
+**Last Updated:** 2025-11-25
+**Version:** 1.1
+
+---
+
+## 11. Neo4j Graph Database Integration (Phase 0)
+
+### 11.1 Overview
+
+The project now includes Neo4j 5.13+ for storing and querying code dependency graphs. This is currently in **Phase 0** (validation/debugging phase) to test Neo4j's suitability for code structure analysis.
+
+### 11.2 Architecture
+
+**Layered Design:**
+```
+API Layer:       app/api/v1/debug_routes.py (debug endpoints)
+                 ↓
+Service Layer:   app/core/graph/graph_service.py (business logic)
+                 ↓
+Client Layer:    app/core/graph/neo4j_client.py (connection pooling)
+                 ↓
+Database:        Neo4j 5.13+ (Docker container)
+```
+
+### 11.3 File Structure
+
+```
+app/core/graph/
+├── __init__.py              # Module exports
+├── neo4j_client.py         # Async Neo4j driver wrapper with connection pooling
+└── graph_service.py        # High-level graph operations (ingest, query)
+
+app/api/v1/
+├── debug_routes.py         # Debug API endpoints (/debug/*)
+└── schemas.py              # Pydantic models for Neo4j API (added at end)
+
+tests/
+├── unit/core/graph/
+│   └── test_neo4j_client.py   # Unit tests for Neo4j client
+├── unit/test_debug_api.py      # Unit tests for debug API
+└── integration/
+    └── test_neo4j_integration.py  # Integration tests (requires Neo4j)
+```
+
+### 11.4 Data Model
+
+**Node: Symbol**
+- Properties: `name`, `qualified_name`, `kind`, `signature`, `file_path`, `line_start`, `line_end`, `project_id`
+- `qualified_name` has unique constraint (e.g., "module.ClassName.method_name")
+- `kind` can be: "function", "class", "method"
+
+**Relationship: CALLS**
+- `(caller:Symbol)-[:CALLS {line: N}]->(callee:Symbol)`
+- Represents function call dependencies
+
+**Relationship: IMPORTS**
+- `(file:Symbol)-[:IMPORTS {names: [...]}]->(module:Symbol)`
+- Represents import statements
+
+### 11.5 Debug API Endpoints
+
+**POST /debug/ingest-symbols**
+- Accepts code symbols and relationships from frontend
+- Uses MERGE to avoid duplicates
+- Transaction support for atomicity
+- Returns: `nodes_created`, `relationships_created`, `processing_time_ms`
+
+**GET /debug/query-function/{function_name}?project_id=...&depth=1**
+- Query function and its dependencies (1-3 levels)
+- Returns: function info, dependencies list, `query_time_ms`
+- Returns 404 if function not found
+
+**GET /debug/health/neo4j**
+- Health check for Neo4j connectivity
+- Returns 200 if healthy, 503 if unavailable
+
+### 11.6 Performance Targets
+
+- **Batch Insert**: 100 nodes + 200 relationships < 2 seconds
+- **Query Latency**: < 100ms for single function query
+- **Memory Usage**: < 500MB for typical workload
+
+### 11.7 Configuration
+
+**Environment Variables:**
+```env
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=neo4j123
+NEO4J_DATABASE=neo4j
+```
+
+**Settings in app/config.py:**
+- `neo4j_uri`, `neo4j_user`, `neo4j_password`, `neo4j_database`
+- `neo4j_max_connection_lifetime`, `neo4j_max_connection_pool_size`
+- `neo4j_connection_acquisition_timeout`
+
+### 11.8 Usage Example
+
+**Ingest Symbols:**
+```bash
+curl -X POST http://localhost:8886/debug/ingest-symbols \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "test-project",
+    "symbols": [
+      {
+        "name": "calculate_tax",
+        "qualified_name": "module.calculate_tax",
+        "kind": "function",
+        "signature": "(price: float) -> float",
+        "file_path": "/app/utils.py",
+        "line_start": 10,
+        "line_end": 20
+      }
+    ],
+    "calls": [],
+    "imports": []
+  }'
+```
+
+**Query Function:**
+```bash
+curl "http://localhost:8886/debug/query-function/calculate_tax?project_id=test-project"
+```
+
+### 11.9 Testing
+
+**Unit Tests:**
+```bash
+pytest tests/unit/core/graph/ tests/unit/test_debug_api.py
+```
+
+**Integration Tests (requires running Neo4j):**
+```bash
+docker-compose up -d neo4j
+pytest tests/integration/test_neo4j_integration.py -m integration
+```
+
+### 11.10 Key Implementation Details
+
+**Async Transactions:**
+```python
+# Correct pattern for Neo4j async transactions
+async with self.client.session() as session:
+    tx = await session.begin_transaction()
+    try:
+        # Execute queries
+        await tx.run(query, params)
+        await tx.commit()
+    except Exception:
+        await tx.rollback()
+        raise
+```
+
+**Context Manager for Resource Cleanup:**
+```python
+@asynccontextmanager
+async def get_graph_service_context():
+    service = GraphService()
+    try:
+        await service.connect()
+        yield service
+    finally:
+        await service.close()
+```
+
+### 11.11 Indexing Strategy
+
+**Automatically created on startup:**
+1. Unique constraint on `Symbol.qualified_name` (prevents duplicates)
+2. Index on `Symbol.name` (fast function lookup)
+3. Index on `Symbol.project_id` (multi-tenant queries)
+
+**Verify indexes in Neo4j Browser:**
+```cypher
+:schema
+```
+
+### 11.12 Common Pitfalls to Avoid
+
+1. **Transaction Management**: Always await `session.begin_transaction()`
+2. **Context Managers**: Don't wrap exceptions in async context managers
+3. **MERGE vs CREATE**: Use MERGE to avoid duplicate nodes
+4. **Qualified Names**: Ensure uniqueness across the codebase
+5. **Project Isolation**: Always include `project_id` in queries
+
+### 11.13 Future Enhancements (Post-Phase 0)
+
+- Integrate with Feature 3 (Impact Analysis)
+- Add more relationship types (INHERITS, IMPLEMENTS)
+- Graph visualization endpoints
+- Historical analysis and metrics tracking
+
+---
+
+For detailed Neo4j documentation, see `docs/context/neo4j-integration.md`

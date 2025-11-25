@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from starlette.responses import Response as StarletteResponse
 
 from app.analyzers.rule_engine import RuleEngine
+from app.api.v1 import debug_routes
 from app.api.v1.schemas import (
     AsyncJobResponse,
     CoverageOptimizationRequest,
@@ -432,3 +433,7 @@ async def analyze_impact(
         raise HTTPException(
             status_code=500, detail="Impact analysis failed due to internal error"
         )
+
+
+# Include debug routes for Neo4j testing
+router.include_router(debug_routes.router)

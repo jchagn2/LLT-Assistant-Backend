@@ -328,3 +328,100 @@ class QualityAnalysisResponse(BaseModel):
     )
     summary: QualitySummary = Field(description="Analysis summary statistics")
     issues: List[QualityIssue] = Field(description="List of detected quality issues")
+
+
+# ============================================================================
+# Neo4j Debug API Schemas
+# ============================================================================
+
+
+class SymbolNode(BaseModel):
+    """Symbol node in the code dependency graph."""
+
+    name: str = Field(description="Symbol name (e.g., 'calculate_total')")
+    qualified_name: str = Field(
+        description="Fully qualified name (e.g., 'module.ClassName.method_name')"
+    )
+    kind: Literal["function", "class", "method"] = Field(description="Type of symbol")
+    signature: Optional[str] = Field(
+        default=None,
+        description="Function/method signature with parameters",
+    )
+    file_path: str = Field(description="File path where symbol is defined")
+    line_start: int = Field(description="Starting line number", ge=1)
+    line_end: int = Field(description="Ending line number", ge=1)
+
+
+class CallRelationship(BaseModel):
+    """CALLS relationship between symbols."""
+
+    caller_qualified_name: str = Field(description="Qualified name of the caller")
+    callee_qualified_name: str = Field(description="Qualified name of the callee")
+    line: int = Field(description="Line number where call occurs", ge=1)
+
+
+class ImportRelationship(BaseModel):
+    """IMPORTS relationship between file and module."""
+
+    file_qualified_name: str = Field(description="Qualified name of the importing file")
+    module_qualified_name: str = Field(
+        description="Qualified name of the imported module"
+    )
+    module_name: str = Field(description="Module name (e.g., 'decimal')")
+    names: List[str] = Field(
+        description="List of imported names (e.g., ['Decimal', 'ROUND_UP'])"
+    )
+
+
+class IngestSymbolsRequest(BaseModel):
+    """Request payload for /debug/ingest-symbols endpoint."""
+
+    project_id: str = Field(
+        default="test-project",
+        description="Project identifier for multi-tenant support",
+    )
+    symbols: List[SymbolNode] = Field(description="List of symbol nodes to create")
+    calls: List[CallRelationship] = Field(
+        default=[],
+        description="List of CALLS relationships",
+    )
+    imports: List[ImportRelationship] = Field(
+        default=[],
+        description="List of IMPORTS relationships",
+    )
+
+
+class IngestSymbolsResponse(BaseModel):
+    """Response for /debug/ingest-symbols endpoint."""
+
+    nodes_created: int = Field(description="Number of nodes created/updated")
+    relationships_created: int = Field(description="Number of relationships created")
+    processing_time_ms: int = Field(description="Processing time in milliseconds")
+    project_id: str = Field(description="Project identifier used")
+
+
+class SymbolInfo(BaseModel):
+    """Symbol information in query results."""
+
+    name: str
+    qualified_name: str
+    kind: str
+    signature: Optional[str] = None
+    file_path: str
+    line_start: int
+    line_end: int
+
+
+class QueryFunctionResponse(BaseModel):
+    """Response for /debug/query-function endpoint."""
+
+    function: Optional[SymbolInfo] = Field(
+        default=None,
+        description="Queried function information (None if not found)",
+    )
+    dependencies: List[SymbolInfo] = Field(
+        default=[],
+        description="List of functions this function calls",
+    )
+    query_time_ms: int = Field(description="Query execution time in milliseconds")
+    project_id: str = Field(description="Project identifier used")

@@ -21,9 +21,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+
+    # Initialize Neo4j connection and indexes
+    from app.core.graph.graph_service import GraphService
+
+    graph_service = None
+    try:
+        logger.info("Initializing Neo4j connection...")
+        graph_service = GraphService()
+        await graph_service.connect()
+        await graph_service.create_indexes()
+        logger.info("Neo4j initialization completed")
+    except Exception as e:
+        logger.warning(
+            "Neo4j initialization failed (continuing without graph features): %s", e
+        )
+
     yield
+
     # Shutdown
     logger.info(f"Shutting down {settings.app_name}")
+
+    # Cleanup Neo4j
+    if graph_service:
+        try:
+            await graph_service.close()
+            logger.info("Neo4j connection closed")
+        except Exception as e:
+            logger.warning("Error closing Neo4j connection: %s", e)
 
     # Cleanup task storage
     try:
