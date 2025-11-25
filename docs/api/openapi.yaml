@@ -27,6 +27,8 @@ servers:
 tags:
   - name: System
     description: Health and System status
+  - name: Context Management
+    description: Phase 1 - Code graph initialization and incremental updates
   - name: Feature 1 - Generation
     description: Generate new tests from scratch or descriptions
   - name: Feature 2 - Coverage
@@ -60,6 +62,141 @@ paths:
                     enum: [healthy, degraded]
                   version:
                     type: string
+
+  # ============================================================================
+  # PHASE 1: Context Management (Code Graph)
+  # ============================================================================
+  /context/projects/initialize:
+    post:
+      summary: Initialize Project Code Graph
+      description: |
+        Initialize a new project's code dependency graph in Neo4j.
+        Creates Symbol nodes and CALLS relationships for all provided files.
+        Returns 409 if project already exists.
+      tags:
+        - Context Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializeProjectRequest'
+      responses:
+        '201':
+          description: Project initialized successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitializeProjectResponse'
+        '409':
+          description: Project already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /context/projects/{project_id}/incremental:
+    patch:
+      summary: Apply Incremental Updates
+      description: |
+        Apply incremental changes to project graph with optimistic locking.
+        Uses version number to detect and prevent conflicts.
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncrementalUpdateRequest'
+      responses:
+        '200':
+          description: Update applied successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncrementalUpdateResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /context/projects/{project_id}/status:
+    get:
+      summary: Get Project Status
+      description: |
+        Get current status and statistics of a project including
+        version number, indexed files/symbols count, and last update time.
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      responses:
+        '200':
+          description: Status retrieved successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectStatusResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ============================================================================
   # FEATURE 1: Test Generation (Preserved)
@@ -208,6 +345,38 @@ components:
     # ----------------------------------------
     # Shared Schemas
     # ----------------------------------------
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - error_code
+        - request_id
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        error_code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - PROJECT_EXISTS
+            - PROJECT_NOT_FOUND
+            - VERSION_CONFLICT
+            - VALIDATION_ERROR
+            - DB_CONNECTION_ERROR
+            - DB_QUERY_ERROR
+            - INTERNAL_ERROR
+        details:
+          type: object
+          description: Additional error context
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier for tracing
+        suggestion:
+          type: string
+          description: Suggested action to resolve the error
+
     AsyncJobResponse:
       type: object
       required:
@@ -254,6 +423,226 @@ components:
               type: string
             code:
               type: string
+
+    # ----------------------------------------
+    # Phase 1: Context Management Schemas
+    # ----------------------------------------
+    SymbolInfo:
+      type: object
+      required:
+        - name
+        - kind
+        - line_start
+        - line_end
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Symbol name (function/class/method name)
+        kind:
+          type: string
+          enum: [function, class, method]
+          description: Symbol type
+        signature:
+          type: string
+          maxLength: 500
+          description: Function signature with type hints
+        line_start:
+          type: integer
+          minimum: 0
+          description: Start line number (0-based)
+        line_end:
+          type: integer
+          minimum: 0
+          description: End line number (0-based)
+        calls:
+          type: array
+          items:
+            type: string
+          description: Names of functions called by this symbol
+          default: []
+
+    FileSymbols:
+      type: object
+      required:
+        - path
+        - symbols
+      properties:
+        path:
+          type: string
+          pattern: '^[\w\-./]+\.py$'
+          description: File path relative to workspace (must be .py file)
+        symbols:
+          type: array
+          minItems: 0
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/SymbolInfo'
+          description: List of symbols extracted from this file
+
+    InitializeProjectRequest:
+      type: object
+      required:
+        - project_id
+        - workspace_path
+        - files
+      properties:
+        project_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Unique project identifier
+        workspace_path:
+          type: string
+          description: Absolute path to workspace directory
+        language:
+          type: string
+          enum: [python]
+          default: python
+          description: Programming language (currently only Python supported)
+        files:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items:
+            $ref: '#/components/schemas/FileSymbols'
+          description: List of files with their symbols to index
+
+    InitializeProjectResponse:
+      type: object
+      required:
+        - project_id
+        - status
+        - indexed_files
+        - indexed_symbols
+        - processing_time_ms
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        status:
+          type: string
+          enum: [initialized, already_exists]
+          description: Initialization status
+        indexed_files:
+          type: integer
+          minimum: 0
+          description: Number of files indexed
+        indexed_symbols:
+          type: integer
+          minimum: 0
+          description: Number of symbols created
+        processing_time_ms:
+          type: integer
+          minimum: 0
+          description: Processing time in milliseconds
+
+    SymbolChange:
+      type: object
+      required:
+        - action
+        - symbol
+      properties:
+        action:
+          type: string
+          enum: [added, modified, deleted]
+          description: Type of change applied to the symbol
+        symbol:
+          $ref: '#/components/schemas/SymbolInfo'
+
+    FileChange:
+      type: object
+      required:
+        - file_path
+        - action
+      properties:
+        file_path:
+          type: string
+          description: Path to the changed file
+        action:
+          type: string
+          enum: [modified, deleted]
+          description: Type of file change
+        symbols_changed:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolChange'
+          description: List of symbol changes within the file
+
+    IncrementalUpdateRequest:
+      type: object
+      required:
+        - version
+        - changes
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Current backend version for optimistic locking
+        changes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FileChange'
+          description: List of file changes to apply
+
+    IncrementalUpdateResponse:
+      type: object
+      required:
+        - project_id
+        - version
+        - updated_at
+        - changes_applied
+        - processing_time_ms
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        version:
+          type: integer
+          description: New backend version after update
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of the update
+        changes_applied:
+          type: integer
+          description: Number of changes successfully applied
+        processing_time_ms:
+          type: integer
+          description: Processing time in milliseconds
+
+    ProjectStatusResponse:
+      type: object
+      required:
+        - project_id
+        - status
+        - indexed_files
+        - indexed_symbols
+        - last_updated_at
+        - backend_version
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        status:
+          type: string
+          enum: [active, indexing, error]
+          description: Current project status
+        indexed_files:
+          type: integer
+          description: Total number of indexed files
+        indexed_symbols:
+          type: integer
+          description: Total number of indexed symbols
+        last_updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        backend_version:
+          type: integer
+          description: Current backend version for optimistic locking
 
     # ----------------------------------------
     # Feature 1 Schemas
