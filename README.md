@@ -284,12 +284,50 @@ llt-backend/
 # Install dev dependencies
 uv pip install -e ".[dev]"
 
-# Run tests
-pytest tests/
+# Run all unit tests
+pytest tests/unit/
 
-# Run with coverage
-pytest tests/ --cov=app --cov-report=html
+# Run unit tests with coverage
+pytest tests/unit/ --cov=app --cov-report=html
 ```
+
+#### Integration Tests
+
+Integration tests require Neo4j to be running. These tests verify the complete request flow through the main FastAPI application with real database connections.
+
+**Prerequisites:**
+- Neo4j must be running (use Docker Compose)
+
+**Running Integration Tests:**
+
+```bash
+# Start Neo4j
+docker-compose up -d neo4j
+
+# Verify Neo4j is running
+nc -zv localhost 7687
+
+# Run integration tests (when running locally, must use localhost URI)
+NEO4J_URI=bolt://localhost:7687 \
+NEO4J_USER=neo4j \
+NEO4J_PASSWORD=neo4j123 \
+NEO4J_DATABASE=neo4j \
+uv run pytest tests/integration/ -v -m integration --no-cov
+
+# Or run specific integration test file
+NEO4J_URI=bolt://localhost:7687 \
+NEO4J_USER=neo4j \
+NEO4J_PASSWORD=neo4j123 \
+NEO4J_DATABASE=neo4j \
+uv run pytest tests/integration/test_full_flow.py -v -m integration
+```
+
+**Important Notes:**
+- When running tests **locally** (outside Docker), use `NEO4J_URI=bolt://localhost:7687`
+- When running tests **inside Docker**, use `NEO4J_URI=bolt://neo4j:7687` (default in .env)
+- Integration tests are marked with `@pytest.mark.integration`
+- Each test creates unique project IDs to avoid conflicts
+- Cleanup fixtures automatically remove test data after each test
 
 ### Code Quality
 
