@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class FileInput(BaseModel):
@@ -197,6 +197,30 @@ class TaskStatusResponse(BaseModel):
         default=None, description="Error details (when status=failed)"
     )
 
+    @model_serializer
+    def serialize_model(self) -> Dict[str, Any]:
+        """
+        Custom serializer to exclude null result/error fields for pending/processing status.
+
+        This prevents the API from returning result: null and error: null for tasks
+        that are still in progress, improving REST API compliance.
+        """
+        data: Dict[str, Any] = {
+            "task_id": self.task_id,
+            "status": self.status,
+        }
+
+        if self.created_at is not None:
+            data["created_at"] = self.created_at
+
+        # Only include result/error fields for completed/failed status
+        if self.status == "completed" and self.result is not None:
+            data["result"] = self.result
+        if self.status == "failed" and self.error is not None:
+            data["error"] = self.error
+
+        return data
+
 
 # ============================================================================
 # Feature 3: Impact Analysis (OpenAPI compliant schemas)
@@ -244,6 +268,14 @@ class ImpactAnalysisRequest(BaseModel):
 
     project_context: ProjectImpactContext = Field(
         description="Project context with changed files and related tests"
+    )
+    git_diff: Optional[str] = Field(
+        default=None,
+        description="Optional git diff content for function-level impact analysis",
+    )
+    project_id: Optional[str] = Field(
+        default="default",
+        description="Project identifier for graph database queries",
     )
 
 
@@ -422,6 +454,21 @@ class QueryFunctionResponse(BaseModel):
     dependencies: List[SymbolInfo] = Field(
         default=[],
         description="List of functions this function calls",
+    )
+    query_time_ms: int = Field(description="Query execution time in milliseconds")
+    project_id: str = Field(description="Project identifier used")
+
+
+class QueryCallersResponse(BaseModel):
+    """Response for /debug/query-callers endpoint (reverse dependencies)."""
+
+    function: Optional[SymbolInfo] = Field(
+        default=None,
+        description="Queried function information (None if not found)",
+    )
+    callers: List[SymbolInfo] = Field(
+        default=[],
+        description="List of functions that call this function",
     )
     query_time_ms: int = Field(description="Query execution time in milliseconds")
     project_id: str = Field(description="Project identifier used")

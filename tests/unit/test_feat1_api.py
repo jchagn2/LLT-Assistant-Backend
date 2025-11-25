@@ -172,3 +172,69 @@ class TestTaskStatusEndpoint:
         assert response.status_code == 404
         # According to OpenAPI spec, 404 response should have empty body
         assert response.content == b""
+
+    def test_get_task_status_excludes_null_fields_for_pending_status(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Pending tasks should not include result or error fields to avoid null values."""
+
+        async def fake_get_task(task_id: str) -> dict:  # type: ignore[override]
+            return {
+                "id": task_id,
+                "status": "pending",
+                "created_at": "2025-11-26T10:00:00Z",
+                "result": None,
+                "error": None,
+            }
+
+        monkeypatch.setattr(routes_module, "get_task", fake_get_task)
+
+        response = client.get("/tasks/123e4567-e89b-12d3-a456-426614174000")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify required fields are present
+        assert data["task_id"] == "123e4567-e89b-12d3-a456-426614174000"
+        assert data["status"] == "pending"
+        assert data["created_at"] == "2025-11-26T10:00:00Z"
+
+        # CRITICAL: result and error fields should NOT be present (not even as null)
+        assert (
+            "result" not in data
+        ), "result field should be excluded for pending status"
+        assert "error" not in data, "error field should be excluded for pending status"
+
+    def test_get_task_status_excludes_null_fields_for_processing_status(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Processing tasks should not include result or error fields to avoid null values."""
+
+        async def fake_get_task(task_id: str) -> dict:  # type: ignore[override]
+            return {
+                "id": task_id,
+                "status": "processing",
+                "created_at": "2025-11-26T10:00:00Z",
+                "result": None,
+                "error": None,
+            }
+
+        monkeypatch.setattr(routes_module, "get_task", fake_get_task)
+
+        response = client.get("/tasks/123e4567-e89b-12d3-a456-426614174000")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify required fields are present
+        assert data["task_id"] == "123e4567-e89b-12d3-a456-426614174000"
+        assert data["status"] == "processing"
+        assert data["created_at"] == "2025-11-26T10:00:00Z"
+
+        # CRITICAL: result and error fields should NOT be present (not even as null)
+        assert (
+            "result" not in data
+        ), "result field should be excluded for processing status"
+        assert (
+            "error" not in data
+        ), "error field should be excluded for processing status"
