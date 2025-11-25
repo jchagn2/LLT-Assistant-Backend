@@ -9,7 +9,9 @@ class FileInput(BaseModel):
     """Individual test file to analyze."""
 
     path: str = Field(description="File path relative to project root")
-    content: str = Field(description="Full file content")
+    content: str = Field(
+        min_length=1, description="Full file content (cannot be empty)"
+    )
     git_diff: Optional[str] = Field(
         default=None, description="Optional: only analyze changed lines"
     )

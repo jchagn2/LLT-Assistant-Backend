@@ -444,3 +444,88 @@ class TestQualityAnalysisAPI:
         response_data = response.json()
         assert "detail" in response_data
         assert "too many" in response_data["detail"].lower()
+
+    def test_quality_analyze_empty_content(self):
+        """Test quality analysis fails when file content is empty string."""
+        client = TestClient(app)
+
+        request_payload = {
+            "files": [
+                {
+                    "path": "test_empty.py",
+                    "content": "",  # Empty string - should fail validation
+                }
+            ],
+            "mode": "hybrid",
+        }
+
+        response = client.post("/quality/analyze", json=request_payload)
+
+        # Should return 422 for validation error
+        assert response.status_code == 422
+        response_data = response.json()
+
+        # Verify error details mention 'content' field
+        assert "detail" in response_data
+        errors = response_data["detail"]
+        assert any("content" in str(error).lower() for error in errors)
+
+    def test_quality_analyze_response_schema_excludes_severity_breakdown(self):
+        """
+        Integration test: Verify that severity_breakdown is NOT in API response.
+
+        This test ensures that the internal severity breakdown calculation
+        (added for logging and metrics) is not exposed in the API response,
+        maintaining backward compatibility with existing clients.
+        """
+        client = TestClient(app)
+
+        # Create request with simple test file
+        request_payload = {
+            "files": [
+                {
+                    "path": "test.py",
+                    "content": "def test_example(): assert 1 + 1 == 2",
+                }
+            ],
+            "mode": "fast",
+        }
+
+        response = client.post("/quality/analyze", json=request_payload)
+
+        # Verify response is successful
+        assert response.status_code == 200
+        response_data = response.json()
+
+        # Verify expected fields ARE present
+        assert "analysis_id" in response_data
+        assert "summary" in response_data
+        assert "issues" in response_data
+
+        # Verify summary structure (existing fields only)
+        summary = response_data["summary"]
+        assert "total_files" in summary
+        assert "total_issues" in summary
+        assert "critical_issues" in summary
+
+        # CRITICAL CHECK: Verify severity_breakdown is NOT in summary
+        assert "severity_breakdown" not in summary, (
+            "severity_breakdown should NOT be exposed in API response. "
+            "It is an internal metric for logging only."
+        )
+
+        # Additional check: Verify no breakdown-related fields exist
+        breakdown_related_fields = ["errors", "warnings", "info", "breakdown"]
+        for field in breakdown_related_fields:
+            assert field not in summary, (
+                f"Field '{field}' should not be in summary. "
+                "Only total_files, total_issues, and critical_issues should be present."
+            )
+
+        # Verify only expected fields are in summary (no extra fields)
+        expected_summary_fields = {"total_files", "total_issues", "critical_issues"}
+        actual_summary_fields = set(summary.keys())
+        assert actual_summary_fields == expected_summary_fields, (
+            f"Summary should only contain {expected_summary_fields}, "
+            f"but got {actual_summary_fields}"
+        )
