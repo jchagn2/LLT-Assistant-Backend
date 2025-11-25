@@ -100,11 +100,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Validation error
+          description: Validation error - empty files or no symbols
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                empty_files:
+                  summary: Empty files array
+                  value:
+                    error: "Files array cannot be empty. At least one file with symbols is required."
+                    error_code: EMPTY_FILES
+                    details:
+                      files_count: 0
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+                    timestamp: "2025-11-25T10:30:00Z"
+                    path: "/context/projects/initialize"
+                no_symbols:
+                  summary: Files with no symbols
+                  value:
+                    error: "All files contain no symbols. Cannot initialize empty project."
+                    error_code: NO_SYMBOLS
+                    details:
+                      total_files: 3
+                      files_with_symbols: 0
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+                    timestamp: "2025-11-25T10:30:00Z"
+                    path: "/context/projects/initialize"
         '503':
           description: Database unavailable
           content:
