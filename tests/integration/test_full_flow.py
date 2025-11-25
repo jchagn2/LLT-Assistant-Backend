@@ -371,3 +371,122 @@ def test_project_already_exists(test_project_id, cleanup_project):
     data = response2.json()
     assert test_project_id in data["error"]
     assert data["error_code"] == "PROJECT_EXISTS"
+
+
+@pytest.mark.integration
+def test_delete_project_full_flow(test_project_id):
+    """Test complete project deletion flow."""
+    client = TestClient(app)
+
+    # Step 1: Initialize project
+    init_payload = {
+        "project_id": test_project_id,
+        "workspace_path": "/Users/dev/test-workspace",
+        "language": "python",
+        "files": [
+            {
+                "path": "/app/calculator.py",
+                "symbols": [
+                    {
+                        "name": "add",
+                        "kind": "function",
+                        "signature": "(a: int, b: int) -> int",
+                        "line_start": 10,
+                        "line_end": 15,
+                        "calls": [],
+                    },
+                    {
+                        "name": "subtract",
+                        "kind": "function",
+                        "signature": "(a: int, b: int) -> int",
+                        "line_start": 20,
+                        "line_end": 25,
+                        "calls": [],
+                    },
+                ],
+            },
+            {
+                "path": "/app/utils.py",
+                "symbols": [
+                    {
+                        "name": "format_result",
+                        "kind": "function",
+                        "line_start": 5,
+                        "line_end": 10,
+                        "calls": [],
+                    }
+                ],
+            },
+        ],
+    }
+
+    init_response = client.post("/context/projects/initialize", json=init_payload)
+    assert init_response.status_code == 201
+    assert init_response.json()["indexed_symbols"] == 3
+
+    # Step 2: Verify project exists
+    status_response = client.get(f"/context/projects/{test_project_id}/status")
+    assert status_response.status_code == 200
+    assert status_response.json()["indexed_symbols"] == 3
+
+    # Step 3: Delete project
+    delete_response = client.delete(f"/context/projects/{test_project_id}")
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""  # Empty body
+    assert "X-Request-ID" in delete_response.headers
+
+    # Step 4: Verify project no longer exists
+    status_after_delete = client.get(f"/context/projects/{test_project_id}/status")
+    assert status_after_delete.status_code == 404
+    assert "not found" in status_after_delete.json()["error"].lower()
+
+    # Step 5: Delete again (idempotent) should still return 204
+    delete_again_response = client.delete(f"/context/projects/{test_project_id}")
+    assert delete_again_response.status_code == 204
+    assert delete_again_response.content == b""
+
+
+@pytest.mark.integration
+def test_empty_files_validation(test_project_id):
+    """Test that empty files array returns 422 with EMPTY_FILES error."""
+    client = TestClient(app)
+
+    payload = {
+        "project_id": test_project_id,
+        "workspace_path": "/Users/dev/test-workspace",
+        "language": "python",
+        "files": [],  # Empty array
+    }
+
+    response = client.post("/context/projects/initialize", json=payload)
+
+    assert response.status_code == 422
+    data = response.json()
+    assert data["error_code"] == "EMPTY_FILES"
+    assert data["details"]["files_count"] == 0
+    assert "request_id" in data
+
+
+@pytest.mark.integration
+def test_no_symbols_validation(test_project_id):
+    """Test that files with no symbols return 422 with NO_SYMBOLS error."""
+    client = TestClient(app)
+
+    payload = {
+        "project_id": test_project_id,
+        "workspace_path": "/Users/dev/test-workspace",
+        "language": "python",
+        "files": [
+            {"path": "/app/empty1.py", "symbols": []},
+            {"path": "/app/empty2.py", "symbols": []},
+        ],
+    }
+
+    response = client.post("/context/projects/initialize", json=payload)
+
+    assert response.status_code == 422
+    data = response.json()
+    assert data["error_code"] == "NO_SYMBOLS"
+    assert data["details"]["total_files"] == 2
+    assert data["details"]["files_with_symbols"] == 0
+    assert "request_id" in data
