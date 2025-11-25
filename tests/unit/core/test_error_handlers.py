@@ -13,9 +13,11 @@ from fastapi.testclient import TestClient
 
 from app.core.error_handlers import (
     BatchOperationError,
+    EmptyFilesError,
     LLTException,
     Neo4jConnectionError,
     Neo4jQueryError,
+    NoSymbolsError,
     ProjectAlreadyExistsError,
     ProjectNotFoundError,
     ValidationError,
@@ -109,6 +111,23 @@ class TestCustomExceptions:
         assert exc.details["total"] == 100
         assert exc.details["succeeded"] == 95
         assert exc.details["failed"] == 5
+
+    def test_empty_files_error(self):
+        """Test EmptyFilesError initialization and properties."""
+        exc = EmptyFilesError()
+
+        assert "cannot be empty" in str(exc).lower()
+        assert exc.error_code == "EMPTY_FILES"
+        assert exc.details["files_count"] == 0
+
+    def test_no_symbols_error(self):
+        """Test NoSymbolsError with file count."""
+        exc = NoSymbolsError(total_files=5)
+
+        assert "no symbols" in str(exc).lower()
+        assert exc.error_code == "NO_SYMBOLS"
+        assert exc.details["total_files"] == 5
+        assert exc.details["files_with_symbols"] == 0
 
 
 class TestRequestIDMiddleware:
@@ -229,6 +248,47 @@ class TestExceptionHandlers:
         assert response.status_code == 422
         data = response.json()
         assert data["error_code"] == "VALIDATION_ERROR"
+
+    def test_empty_files_error_handler(self):
+        """Test EmptyFilesError handler."""
+        app = FastAPI()
+
+        @app.get("/test")
+        async def test_endpoint():
+            raise EmptyFilesError()
+
+        register_exception_handlers(app)
+        app.add_middleware(RequestIDMiddleware)
+        client = TestClient(app)
+
+        response = client.get("/test")
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["error_code"] == "EMPTY_FILES"
+        assert "cannot be empty" in data["error"].lower()
+        assert "request_id" in data
+
+    def test_no_symbols_error_handler(self):
+        """Test NoSymbolsError handler."""
+        app = FastAPI()
+
+        @app.get("/test")
+        async def test_endpoint():
+            raise NoSymbolsError(total_files=3)
+
+        register_exception_handlers(app)
+        app.add_middleware(RequestIDMiddleware)
+        client = TestClient(app)
+
+        response = client.get("/test")
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["error_code"] == "NO_SYMBOLS"
+        assert "no symbols" in data["error"].lower()
+        assert data["details"]["total_files"] == 3
+        assert "request_id" in data
 
     def test_neo4j_connection_error_handler(self):
         """Test Neo4jConnectionError handler."""
