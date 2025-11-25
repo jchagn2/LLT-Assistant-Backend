@@ -160,6 +160,45 @@ class TestInitializeProjectEndpoint:
         data = response.json()
         assert data["indexed_files"] == 2
 
+    def test_initialize_empty_files_returns_422(self):
+        """Test that empty files array returns 422 with EMPTY_FILES code."""
+        response = client.post(
+            "/context/projects/initialize",
+            json={
+                "project_id": "test-project",
+                "workspace_path": "/test/path",
+                "language": "python",
+                "files": [],  # Empty array
+            },
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["error_code"] == "EMPTY_FILES"
+        assert data["details"]["files_count"] == 0
+
+    def test_initialize_no_symbols_returns_422(self):
+        """Test that files with no symbols returns 422 with NO_SYMBOLS code."""
+        response = client.post(
+            "/context/projects/initialize",
+            json={
+                "project_id": "test-project",
+                "workspace_path": "/test/path",
+                "language": "python",
+                "files": [
+                    {"path": "a.py", "symbols": []},
+                    {"path": "b.py", "symbols": []},
+                    {"path": "c.py", "symbols": []},
+                ],
+            },
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["error_code"] == "NO_SYMBOLS"
+        assert data["details"]["total_files"] == 3
+        assert data["details"]["files_with_symbols"] == 0
+
 
 class TestIncrementalUpdateEndpoint:
     """Test PATCH /context/projects/{project_id}/incremental."""
