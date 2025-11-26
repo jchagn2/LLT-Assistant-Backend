@@ -650,9 +650,9 @@ docker-compose build --no-cache backend
 
 The project supports two build systems:
 - **Primary:** uv + hatchling (production use)
-- **Experimental:** Nix + poetry2nix (POC for reproducible builds)
+- **Experimental:** Nix + pyproject.nix (POC for reproducible builds)
 
-This dual-system approach allows gradual evaluation of Nix without disrupting the existing workflow.
+This dual-system approach allows gradual evaluation of Nix without disrupting the existing workflow. Unlike poetry2nix, pyproject.nix natively supports PEP 621 `[project]` format and works with hatchling build backend.
 
 ### 13.2 Building with Nix
 
@@ -688,7 +688,7 @@ Enter a Nix development shell with all dependencies:
 nix develop
 
 # Inside the shell, you have access to:
-# - poetry
+# - uv
 # - python3.11
 # - All project dependencies
 ```
@@ -702,7 +702,7 @@ The project runs two parallel CI workflows:
    - Primary production pipeline
 
 2. **Nix workflow** (`.github/workflows/nix-build.yml`)
-   - Uses Nix + poetry2nix
+   - Uses Nix + pyproject.nix
    - Experimental validation
    - Triggers on:
      - Push to `dev` branch
@@ -714,36 +714,31 @@ Both workflows run independently and must pass for production deployments.
 ### 13.5 File Structure
 
 **New files added for Nix:**
-- `poetry.lock` - Poetry lock file (generated from pyproject.toml)
-- `flake.nix` - Nix flake definition
+- `flake.nix` - Nix flake definition using pyproject.nix
 - `flake.lock` - Nix dependency lock file
 - `.gitattributes` - Marks lock files as linguist-generated
 - `.github/workflows/nix-build.yml` - Nix CI workflow
 
 **Unchanged files:**
-- `pyproject.toml` - Still uses hatchling build-system
+- `pyproject.toml` - Uses hatchling build-system (PEP 621 format)
 - `uv.lock` - Primary dependency lock file
 - `Dockerfile` - Traditional Docker build
 - `.github/workflows/tests.yml` - Primary CI workflow
 - All application code in `app/`
 
+**Note:** Unlike poetry2nix, pyproject.nix reads dependencies directly from `pyproject.toml`, so no `poetry.lock` file is needed.
+
 ### 13.6 Dependency Management
 
-**Important:** Both `poetry.lock` and `uv.lock` must be kept in sync manually.
+Nix builds use dependencies defined in `pyproject.toml`. When adding new dependencies:
 
-When adding new dependencies:
 1. Update `pyproject.toml`
 2. Regenerate uv lock: `uv lock`
-3. Regenerate poetry lock: `poetry lock`
-4. Update flake: `nix flake lock --update-input nixpkgs`
+3. Update Nix flake inputs: `nix flake lock --update-input nixpkgs`
+
+The Nix build will automatically read dependencies from `pyproject.toml` - no separate lock file needed.
 
 ### 13.7 Troubleshooting
-
-**Issue: "poetry: command not found"**
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-# Add to ~/.zshrc or ~/.bashrc
-```
 
 **Issue: "nix: command not found"**
 ```bash

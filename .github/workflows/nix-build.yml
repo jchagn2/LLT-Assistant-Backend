@@ -78,7 +78,7 @@ jobs:
           timeout 30 bash -c 'until docker exec redis redis-cli ping; do sleep 1; done'
 
           echo "Waiting for Neo4j..."
-          sleep 15
+          timeout 60 bash -c 'until docker exec neo4j cypher-shell -u neo4j -p neo4j123 "RETURN 1" 2>/dev/null; do sleep 2; done'
 
           echo "✅ Services started successfully"
 
@@ -96,7 +96,7 @@ jobs:
 
           # Wait for API to be ready
           echo "Waiting for API to start..."
-          sleep 10
+          timeout 60 bash -c 'until curl -s http://localhost:8886/health > /dev/null; do sleep 2; done'
 
           echo "✅ Container started successfully"
 

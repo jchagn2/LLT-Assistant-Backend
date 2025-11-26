@@ -4,91 +4,76 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    poetry2nix = {
-      url = "github:nix-community/poetry2nix";
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, poetry2nix }:
+  outputs = { self, nixpkgs, flake-utils, pyproject-nix, pyproject-build-systems }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ poetry2nix.overlays.default ];
         };
 
         # Python version to use
         python = pkgs.python311;
 
-        # Poetry2nix instance
-        p2n = pkgs.poetry2nix;
+        # Load project metadata from pyproject.toml
+        project = pyproject-nix.lib.project.loadPyproject {
+          projectRoot = ./.;
+        };
 
-        # Custom overrides for problematic packages
-        poetryOverrides = p2n.defaultPoetryOverrides.extend (self: super: {
-          # Neo4j driver requires specific build inputs
-          neo4j = super.neo4j.overridePythonAttrs (old: {
-            buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.libffi ];
-          });
+        # Python package set with pyproject.nix packages
+        pythonSet = (pkgs.callPackage pyproject-nix.build.packages {
+          inherit python;
+        }).overrideScope (final: prev: (
+          pkgs.callPackage pyproject-build-systems.build.packages {
+            inherit (final) pkgs;
+          }
+        ));
 
-          # Skip tests for packages that have problematic test dependencies
-          httpx = super.httpx.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+        # Render build attributes for buildPythonPackage
+        attrs = project.renderers.buildPythonPackage { inherit python; };
 
-          # LangChain packages may need test skipping
-          langchain = super.langchain.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+        # Custom Python environment with our package
+        app = pythonSet.pythonPkgsHostHost.buildPythonPackage (attrs // {
+          # Override version (required when not using dynamic versioning)
+          version = "0.1.0";
 
-          langchain-openai = super.langchain-openai.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+          # Disable tests during build (run separately in CI)
+          doCheck = false;
 
-          langchain-core = super.langchain-core.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+          # Build inputs - packages needed at build time
+          nativeBuildInputs = with pkgs; [
+            python.pkgs.hatchling
+          ];
 
-          # Redis client
-          redis = super.redis.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+          # Runtime dependencies
+          propagatedBuildInputs = with python.pkgs; [
+            fastapi
+            uvicorn
+            pydantic
+            pydantic-settings
+            httpx
+            python-multipart
+            pytest
+            langchain
+            langchain-openai
+            langchain-core
+            redis
+            neo4j
+          ];
 
-          # FastAPI and related packages
-          fastapi = super.fastapi.overridePythonAttrs (old: {
-            doCheck = false;
-          });
-
-          uvicorn = super.uvicorn.overridePythonAttrs (old: {
-            doCheck = false;
-          });
+          # Additional build configuration
+          pythonImportsCheck = [ "app" ];
         });
-
-        # Main Python application
-        app = p2n.mkPoetryApplication {
-          inherit python;
-          projectDir = ./.;
-          overrides = poetryOverrides;
-
-          # Additional arguments
-          preferWheels = true;
-
-          # Skip tests during build (we'll run them separately)
-          checkPhase = ''
-            echo "Skipping tests during Nix build"
-          '';
-        };
-
-        # Development shell with all dependencies
-        devShell = p2n.mkPoetryEnv {
-          inherit python;
-          projectDir = ./.;
-          overrides = poetryOverrides;
-
-          # Include dev dependencies
-          groups = [ "dev" ];
-          preferWheels = true;
-        };
 
       in
       {
@@ -115,7 +100,7 @@
                 "PYTHONUNBUFFERED=1"
                 "PORT=8886"
               ];
-              WorkingDir = "/app";
+              # Removed WorkingDir per Copilot suggestion - Nix paths are in /nix/store
             };
           };
         };
@@ -123,24 +108,23 @@
         devShells = {
           default = pkgs.mkShell {
             buildInputs = [
-              devShell
-              pkgs.poetry
               python
+              python.pkgs.hatchling
+              app
 
               # Development tools
               pkgs.git
               pkgs.curl
+              pkgs.uv
             ];
 
             shellHook = ''
               echo "🚀 LLT Assistant Backend Development Environment"
               echo "Python version: $(python --version)"
-              echo "Poetry version: $(poetry --version)"
               echo ""
               echo "Available commands:"
-              echo "  poetry install      - Install dependencies"
-              echo "  poetry run pytest   - Run tests"
-              echo "  uvicorn app.main:app --reload - Start development server"
+              echo "  uvicorn app.main:app --reload  - Start development server"
+              echo "  pytest                          - Run tests"
             '';
           };
         };
