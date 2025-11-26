@@ -105,10 +105,14 @@ class LLMClient:
             "stream": stream,
         }
 
+        # Calculate total prompt length for logging
+        prompt_length = sum(len(msg.get("content", "")) for msg in messages)
+
         logger.info(
-            "LLM request starting: model=%s, messages=%d, temp=%.2f, max_tokens=%d",
+            "LLM request sent: model=%s, messages=%d, prompt_length=%d, temp=%.2f, max_tokens=%d",
             self.model,
             len(messages),
+            prompt_length,
             temperature,
             max_tokens,
         )
@@ -184,24 +188,26 @@ class LLMClient:
                 if "choices" in response_data and len(response_data["choices"]) > 0:
                     content = response_data["choices"][0]["message"]["content"]
 
-                    elapsed_time = time.time() - start_time
+                    # Calculate duration in milliseconds
+                    duration_ms = int((time.time() - start_time) * 1000)
 
-                    # Log token usage if available
+                    # Log response with token usage if available
                     if "usage" in response_data:
                         usage = response_data["usage"]
                         logger.info(
-                            "LLM request successful: elapsed=%.2fs, prompt_tokens=%d, "
-                            "completion_tokens=%d, total_tokens=%d",
-                            elapsed_time,
+                            "LLM response received: response_length=%d, duration_ms=%d, "
+                            "prompt_tokens=%d, completion_tokens=%d, total_tokens=%d",
+                            len(content),
+                            duration_ms,
                             usage.get("prompt_tokens", 0),
                             usage.get("completion_tokens", 0),
                             usage.get("total_tokens", 0),
                         )
                     else:
                         logger.info(
-                            "LLM request successful: elapsed=%.2fs, response_length=%d",
-                            elapsed_time,
+                            "LLM response received: response_length=%d, duration_ms=%d, tokens=N/A",
                             len(content),
+                            duration_ms,
                         )
 
                     if settings.log_sensitive_data:

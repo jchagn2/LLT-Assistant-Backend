@@ -6,6 +6,7 @@ dependency injection and resource management.
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
@@ -424,6 +425,8 @@ async def analyze_quality(
     Raises:
         HTTPException: If analysis fails or request is invalid
     """
+    start_time = time.time()
+
     try:
         # Validate request
         if not request.files:
@@ -453,9 +456,17 @@ async def analyze_quality(
                 files=request.files, mode=request.mode
             )
 
+        # Calculate endpoint duration
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # Log endpoint-level response summary with metrics
         logger.info(
-            "Quality analysis completed: %d issues found",
+            "Quality analysis completed: issues=%d, critical=%d, files=%d, mode=%s, duration_ms=%d",
             len(result.issues) if result.issues else 0,
+            result.summary.critical_issues,
+            result.summary.total_files,
+            request.mode,
+            duration_ms,
         )
 
         return result
