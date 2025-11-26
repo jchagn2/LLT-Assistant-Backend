@@ -74,6 +74,26 @@ class AnalyzeResponse(BaseModel):
 # ============================================================================
 
 
+class DebugOptions(BaseModel):
+    """Optional debug configuration for development and testing ONLY.
+
+    WARNING: This should NEVER be used in production environments.
+    """
+
+    simulate_error: bool = Field(
+        default=False,
+        description="If true, immediately fail the task without executing business logic",
+    )
+    error_message: str = Field(
+        default="Simulated error for testing purposes",
+        description="Custom error message to return when simulating failure",
+    )
+    error_code: Optional[str] = Field(
+        default="SIMULATED_ERROR",
+        description="Optional error code for testing error handling",
+    )
+
+
 class GenerateTestsContext(BaseModel):
     """Context for test generation, used for regeneration scenarios."""
 
@@ -102,6 +122,10 @@ class GenerateTestsRequest(BaseModel):
     context: Optional[GenerateTestsContext] = Field(
         default=None,
         description="Extra context if triggered by Feature 3 (Regeneration)",
+    )
+    debug_options: Optional[DebugOptions] = Field(
+        default=None,
+        description="Debug configuration (For Development and Testing ONLY)",
     )
 
 
@@ -155,6 +179,10 @@ class CoverageOptimizationRequest(BaseModel):
     )
     framework: Literal["pytest", "unittest"] = Field(
         default="pytest", description="Target testing framework"
+    )
+    debug_options: Optional[DebugOptions] = Field(
+        default=None,
+        description="Debug configuration (For Development and Testing ONLY)",
     )
 
 
@@ -257,7 +285,7 @@ class ImpactItem(BaseModel):
     impact_score: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Impact score from 0.0 to 1.0"
     )
-    severity: Literal["high", "medium", "low", "none"] = Field(
+    severity: Literal["high", "medium", "low", "informational", "none"] = Field(
         default="none", description="Impact severity level"
     )
     reasons: List[str] = Field(
@@ -287,7 +315,7 @@ class ImpactAnalysisResponse(BaseModel):
     impacted_tests: List[ImpactItem] = Field(
         description="List of test files that may be impacted by the changes"
     )
-    severity: Literal["high", "medium", "low", "none"] = Field(
+    severity: Literal["high", "medium", "low", "informational", "none"] = Field(
         default="none", description="Overall impact severity level"
     )
     suggested_action: Literal["run-all-tests", "run-affected-tests", "no-action"] = (
