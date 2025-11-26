@@ -1,5 +1,15 @@
 # Nix CI/CD Optimization Summary
 
+## ⚠️ Important Update (2025-11-27)
+
+**The workflow has been migrated from Magic Nix Cache to Cachix.**
+
+- **Reason:** Magic Nix Cache will stop working on February 1st, 2025 (GitHub is shutting down the API)
+- **New Solution:** Cachix with 5GB free tier for open source projects
+- **Setup Required:** See [Cachix Setup Guide](./cachix-setup.md) for configuration instructions
+
+---
+
 ## Overview
 
 This document describes the optimization of the Nix-based CI/CD pipeline for the LLT Assistant Backend project. The optimization focuses on improving resource efficiency, reducing redundant operations, and implementing a fail-fast strategy.
@@ -35,31 +45,37 @@ docker-build (Phase 3: Build Docker image)
 integration-test (Phase 4: Run smoke tests)
 ```
 
-### 2. Magic Nix Cache Integration
+### 2. Cachix Binary Cache Integration
 
 **Changes:**
-- Replaced `cachix/install-nix-action@v25` with `DeterminateSystems/nix-installer-action@main`
-- Added `DeterminateSystems/magic-nix-cache-action@main` in all jobs
+- Replaced `DeterminateSystems/nix-installer-action` with `cachix/install-nix-action@v27`
+- Added `cachix/cachix-action@v15` in all jobs
+- Removed `permissions.id-token` requirement (not needed for Cachix)
 
-**Before:**
-```yaml
-- uses: cachix/install-nix-action@v25
-  with:
-    extra_nix_config: |
-      substituters = https://cache.nixos.org
-```
-
-**After:**
+**Before (Magic Nix Cache - deprecated):**
 ```yaml
 - uses: DeterminateSystems/nix-installer-action@main
 - uses: DeterminateSystems/magic-nix-cache-action@main
 ```
 
+**After (Cachix):**
+```yaml
+- uses: cachix/install-nix-action@v27
+  with:
+    nix_path: nixpkgs=channel:nixos-unstable
+- uses: cachix/cachix-action@v15
+  with:
+    name: llt-assistant-backend
+    authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+```
+
 **Benefits:**
-- ✅ Automatic caching of Nix store (no configuration needed)
-- ✅ Free GitHub Actions integration
-- ✅ Reduces build time by caching dependencies
-- ✅ Works across jobs in the same workflow run
+- ✅ 5GB free storage for open source projects
+- ✅ Unlimited bandwidth with CloudFlare CDN
+- ✅ Long-term availability (Magic Nix Cache shuts down Feb 2025)
+- ✅ Better control over cache management
+- ✅ Automatic garbage collection
+- ✅ Deduplication (cache.nixos.org entries don't count)
 
 ### 3. Job Separation
 
