@@ -37,6 +37,7 @@ from app.core.tasks.tasks import (
     execute_coverage_optimization_task,
     execute_generate_tests_task,
     get_task,
+    update_task_status,
 )
 
 router = APIRouter()
