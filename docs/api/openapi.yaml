@@ -592,7 +592,11 @@ components:
             Task result varies by feature type:
             - Feature 1 (Test Generation): Returns GenerateTestsResult with generated_code and explanation
             - Feature 2 (Coverage Optimization): Returns CoverageOptimizationResult with recommended_tests array
-            Only present when status is 'completed'.
+
+            **Field Presence:**
+            - Only present when status='completed'
+            - EXCLUDED (not present) for pending/processing status
+            - Never returned as null
         error:
           type: object
           properties:
@@ -600,6 +604,13 @@ components:
               type: string
             code:
               type: string
+          description: |
+            Error details when task execution fails.
+
+            **Field Presence:**
+            - Only present when status='failed'
+            - EXCLUDED (not present) for pending/processing/completed status
+            - Never returned as null
 
     # ----------------------------------------
     # Phase 1: Context Management Schemas

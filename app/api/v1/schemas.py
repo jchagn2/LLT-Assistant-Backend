@@ -244,10 +244,19 @@ class TaskStatusResponse(BaseModel):
             data["created_at"] = self.created_at
 
         # Only include result/error fields for completed/failed status
+        # Serialize nested Pydantic models to dict to prevent FastAPI re-serialization
         if self.status == "completed" and self.result is not None:
-            data["result"] = self.result
+            data["result"] = (
+                self.result.model_dump(mode="json")
+                if hasattr(self.result, "model_dump")
+                else self.result
+            )
         if self.status == "failed" and self.error is not None:
-            data["error"] = self.error
+            data["error"] = (
+                self.error.model_dump(mode="json")
+                if hasattr(self.error, "model_dump")
+                else self.error
+            )
 
         return data
 

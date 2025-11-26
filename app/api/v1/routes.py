@@ -344,7 +344,11 @@ async def submit_coverage_optimization(
         ) from exc
 
 
-@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskStatusResponse,
+    response_model_exclude_none=True,
+)
 async def get_task_status(task_id: str) -> TaskStatusResponse | StarletteResponse:
     """
     Get task status and results.
