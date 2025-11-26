@@ -36,6 +36,13 @@ class Settings(BaseSettings):
         description="LLM API timeout in seconds",
     )
     llm_max_retries: int = Field(default=3, description="Maximum LLM API retries")
+    llm_max_concurrent_calls: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        validation_alias="LLM_MAX_CONCURRENT_CALLS",
+        description="Maximum concurrent LLM API calls for parallelization",
+    )
 
     # Analysis Configuration
     max_file_size: int = Field(
@@ -113,3 +120,15 @@ class Settings(BaseSettings):
 # NOTE: This is a singleton for configuration only, which is acceptable
 # as configuration should be immutable after initialization.
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Get the global settings instance.
+
+    This factory function provides a testable way to access settings,
+    allowing for dependency injection and mocking in tests.
+
+    Returns:
+        Settings: The global settings instance
+    """
+    return settings
