@@ -101,6 +101,71 @@ class TestGenerateTestsWorkflow:
         # Depending on implementation this may be 400 (BadRequest) or 422 (validation error)
         assert response.status_code in {400, 422}
 
+    def test_generate_tests_with_simulate_error(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that debug_options.simulate_error creates a failed task immediately."""
+
+        task_id_created = "test-task-123"
+
+        async def fake_create_task(payload: Dict[str, Any]) -> str:  # type: ignore[override]
+            return task_id_created
+
+        async def fake_update_task_status(  # type: ignore[override]
+            task_id: str, status: Any, error: str | None = None
+        ) -> None:
+            # Verify the task is being marked as failed with the correct error
+            assert task_id == task_id_created
+            assert str(status) == "TaskStatus.FAILED"
+            assert error == "Test error simulation"
+
+        async def fake_get_task(task_id: str) -> dict:  # type: ignore[override]
+            return {
+                "id": task_id,
+                "status": "failed",
+                "created_at": _iso_now(),
+                "error": {
+                    "message": "Test error simulation",
+                    "code": "TEST_ERROR",
+                    "details": None,
+                },
+            }
+
+        monkeypatch.setattr(routes_module, "create_task", fake_create_task)
+        monkeypatch.setattr(
+            routes_module, "update_task_status", fake_update_task_status
+        )
+        monkeypatch.setattr(routes_module, "get_task", fake_get_task)
+
+        # Submit task with simulate_error=True
+        payload = {
+            "source_code": "def example():\n    pass",
+            "debug_options": {
+                "simulate_error": True,
+                "error_message": "Test error simulation",
+                "error_code": "TEST_ERROR",
+            },
+        }
+
+        response = client.post("/workflows/generate-tests", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+
+        assert data["task_id"] == task_id_created
+        assert data["status"] in {"pending", "processing"}
+        assert data["estimated_time_seconds"] == 0
+
+        # Verify task status shows failed state
+        status_response = client.get(f"/tasks/{task_id_created}")
+        assert status_response.status_code == 200
+
+        status_data = status_response.json()
+        assert status_data["status"] == "failed"
+        assert status_data["error"]["message"] == "Test error simulation"
+        assert status_data["error"]["code"] == "TEST_ERROR"
+        assert "result" not in status_data
+
 
 class TestTaskStatusEndpoint:
     """Tests for /tasks/{task_id} endpoint."""
