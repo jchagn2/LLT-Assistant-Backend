@@ -3,11 +3,11 @@ name: Nix Build and Test
 on:
   push:
     branches:
-      - main
+      - dev
       - 'feat/**'
   pull_request:
     branches:
-      - main
+      - dev
 
 jobs:
   nix-build:
