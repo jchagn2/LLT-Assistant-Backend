@@ -8,6 +8,7 @@ Provides:
 """
 
 import logging
+import time
 import uuid
 from typing import Callable
 
@@ -44,7 +45,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable):
         """
-        Process request and add request ID.
+        Process request and add request ID with lifecycle logging.
 
         Args:
             request: Incoming request
@@ -57,18 +58,38 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
 
-        # Add to logging context (if using structured logging)
+        # Record start time for duration measurement
+        start_time = time.time()
+
+        # Log request start
         logger.info(
             "Request started",
             extra={
                 "request_id": request_id,
                 "method": request.method,
                 "path": request.url.path,
+                "client_ip": request.client.host if request.client else None,
             },
         )
 
         # Process request - let exception handlers handle any exceptions
         response = await call_next(request)
+
+        # Calculate duration
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # Log request completion with metrics
+        logger.info(
+            "Request completed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+
         # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
         return response
