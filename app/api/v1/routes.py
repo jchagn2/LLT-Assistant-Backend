@@ -211,6 +211,7 @@ async def submit_generate_tests(
     """
     Submit a test generation request and return an async task identifier.
     Uses asyncio.create_task to run the generation in the background.
+    Supports debug_options for simulating failures (development/testing only).
     """
     try:
         # Convert request to dict for task payload
@@ -224,6 +225,29 @@ async def submit_generate_tests(
         )
         logger.debug("Request payload: %s", task_payload)
 
+        # Check for debug options to simulate task failure
+        if request.debug_options and request.debug_options.simulate_error:
+            logger.warning(
+                "DEBUG MODE: Simulating task failure with message: %s",
+                request.debug_options.error_message,
+            )
+
+            # Create task in PENDING state
+            task_id = await create_task(task_payload)
+
+            # Immediately mark as FAILED with custom error
+            await update_task_status(
+                task_id, TaskStatus.FAILED, error=request.debug_options.error_message
+            )
+
+            # Return task_id immediately (task is already failed)
+            return AsyncJobResponse(
+                task_id=task_id,
+                status=TaskStatus.PENDING.value,  # Return pending to match normal flow
+                estimated_time_seconds=0,
+            )
+
+        # Normal flow: create task and launch background execution
         task_id = await create_task(task_payload)
         logger.debug("Created task with ID: %s", task_id)
 
@@ -258,6 +282,7 @@ async def submit_coverage_optimization(
     """
     Submit a coverage optimization request and return an async task identifier.
     Uses asyncio.create_task to run the optimization in the background.
+    Supports debug_options for simulating failures (development/testing only).
     """
     try:
         # Convert request to dict for task payload
@@ -271,6 +296,26 @@ async def submit_coverage_optimization(
         )
         logger.debug("Request payload: %s", task_payload)
 
+        # Check for debug options to simulate task failure
+        if request.debug_options and request.debug_options.simulate_error:
+            logger.warning(
+                "DEBUG MODE: Simulating task failure with message: %s",
+                request.debug_options.error_message,
+            )
+
+            # Create and immediately fail the task
+            task_id = await create_task(task_payload)
+            await update_task_status(
+                task_id, TaskStatus.FAILED, error=request.debug_options.error_message
+            )
+
+            return AsyncJobResponse(
+                task_id=task_id,
+                status=TaskStatus.PENDING.value,
+                estimated_time_seconds=0,
+            )
+
+        # Normal flow: create task and launch background execution
         task_id = await create_task(task_payload)
         logger.debug("Created task with ID: %s", task_id)
 
