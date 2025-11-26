@@ -527,10 +527,15 @@ class MissingMockRule(Rule):
             if pattern.lower() in source_lower:
                 return True
 
-        # Check file imports
+        # Check file imports (ImportInfo objects have module and name fields)
         for imp in parsed_file.imports:
             for pattern in MOCK_INDICATOR_PATTERNS:
-                if pattern.lower() in imp.lower():
+                # Check both module and name fields for mock indicators
+                # Example: from unittest.mock import Mock -> module="unittest.mock", name="Mock"
+                if (
+                    pattern.lower() in imp.module.lower()
+                    or pattern.lower() in imp.name.lower()
+                ):
                     return True
 
         return False
