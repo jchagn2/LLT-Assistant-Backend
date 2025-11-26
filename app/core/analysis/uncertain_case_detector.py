@@ -43,9 +43,8 @@ class UncertainCaseDetector:
 
         Criteria (in priority order):
         1. Test smells (sleep, global state) - highest priority
-        2. Complex assertions (>5 assertions)
+        2. Complex assertions (>5 assertions) or unusual decorator patterns (>4 decorators)
         3. Similar function names (potential merge candidates)
-        4. Unusual decorator patterns (>4 decorators)
 
         Args:
             parsed_file: Parsed test file to analyze
@@ -63,22 +62,42 @@ class UncertainCaseDetector:
         for test_class in parsed_file.test_classes:
             all_functions.extend(test_class.methods)
 
+        # Use sets of function IDs to track which functions are already categorized
+        high_priority_ids = set()
+        medium_priority_ids = set()
+
         # Priority 1: Test smells (most important)
         for func in all_functions:
             if self._has_test_smells(func):
+                func_id = (func.name, func.line_number, func.class_name)
+                high_priority_ids.add(func_id)
                 high_priority.append(func)
 
-        # Priority 2: Very complex assertions
+        # Priority 2: Very complex assertions or unusual decorator patterns
         for func in all_functions:
-            if func not in high_priority and self._has_very_complex_assertions(func):
+            func_id = (func.name, func.line_number, func.class_name)
+            if func_id not in high_priority_ids and (
+                self._has_very_complex_assertions(func)
+                or self._has_unusual_decorator_patterns(func)
+            ):
+                medium_priority_ids.add(func_id)
                 medium_priority.append(func)
 
         # Priority 3: Similar names (only if very similar)
         similar_pairs = self._find_similar_function_pairs(all_functions)
         for func1, func2 in similar_pairs:
-            if func1 not in high_priority and func1 not in medium_priority:
+            func1_id = (func1.name, func1.line_number, func1.class_name)
+            func2_id = (func2.name, func2.line_number, func2.class_name)
+
+            if (
+                func1_id not in high_priority_ids
+                and func1_id not in medium_priority_ids
+            ):
                 low_priority.append(func1)
-            if func2 not in high_priority and func2 not in medium_priority:
+            if (
+                func2_id not in high_priority_ids
+                and func2_id not in medium_priority_ids
+            ):
                 low_priority.append(func2)
 
         # Combine with priority order and limit
@@ -94,11 +113,13 @@ class UncertainCaseDetector:
         )
 
         # Remove duplicates while preserving order
+        # Use (name, line_number, class_name) as unique identifier instead of the object itself
         seen = set()
         result = []
         for func in uncertain_functions:
-            if func not in seen:
-                seen.add(func)
+            func_id = (func.name, func.line_number, func.class_name)
+            if func_id not in seen:
+                seen.add(func_id)
                 result.append(func)
 
         # Limit to max calls
