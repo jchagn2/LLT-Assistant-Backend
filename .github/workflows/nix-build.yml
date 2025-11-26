@@ -1,0 +1,164 @@
+name: Nix Build and Test
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  nix-build:
+    name: Build with Nix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          # Remove unnecessary files to free up disk space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            substituters = https://cache.nixos.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Build Python application
+        run: |
+          nix build . --show-trace
+          echo "✅ Nix build completed successfully"
+
+      - name: Verify application
+        run: |
+          ./result/bin/python --version
+          echo "✅ Python application verified"
+
+      - name: Build Docker image
+        run: |
+          nix build .#dockerImage --show-trace
+          echo "✅ Docker image build completed"
+
+      - name: Load Docker image
+        run: |
+          docker load < result
+          echo "✅ Docker image loaded"
+
+      - name: List Docker images
+        run: |
+          docker images | grep llt-api
+          echo "✅ Docker image found"
+
+      - name: Start services for testing
+        run: |
+          # Start Redis and Neo4j for integration testing
+          docker network create llt-network || true
+
+          docker run -d --name redis --network llt-network \
+            -p 6379:6379 redis:7-alpine
+
+          docker run -d --name neo4j --network llt-network \
+            -p 7474:7474 -p 7687:7687 \
+            -e NEO4J_AUTH=neo4j/neo4j123 \
+            neo4j:5.13
+
+          # Wait for services to be ready
+          echo "Waiting for Redis..."
+          timeout 30 bash -c 'until docker exec redis redis-cli ping; do sleep 1; done'
+
+          echo "Waiting for Neo4j..."
+          sleep 15
+
+          echo "✅ Services started successfully"
+
+      - name: Run Docker container
+        run: |
+          docker run -d --name llt-api --network llt-network \
+            -p 8886:8886 \
+            -e REDIS_HOST=redis \
+            -e REDIS_PORT=6379 \
+            -e NEO4J_URI=bolt://neo4j:7687 \
+            -e NEO4J_USER=neo4j \
+            -e NEO4J_PASSWORD=neo4j123 \
+            -e NEO4J_DATABASE=neo4j \
+            llt-api:latest
+
+          # Wait for API to be ready
+          echo "Waiting for API to start..."
+          sleep 10
+
+          echo "✅ Container started successfully"
+
+      - name: Check container logs
+        if: always()
+        run: |
+          echo "=== LLT API Logs ==="
+          docker logs llt-api || true
+
+      - name: Smoke test - Health endpoint
+        run: |
+          # Test health endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8886/health)
+
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Health check passed (HTTP $response)"
+          else
+            echo "❌ Health check failed (HTTP $response)"
+            docker logs llt-api
+            exit 1
+          fi
+
+      - name: Smoke test - API documentation
+        run: |
+          # Test OpenAPI docs endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8886/docs)
+
+          if [ "$response" -eq 200 ]; then
+            echo "✅ API docs accessible (HTTP $response)"
+          else
+            echo "❌ API docs not accessible (HTTP $response)"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop llt-api neo4j redis || true
+          docker rm llt-api neo4j redis || true
+          docker network rm llt-network || true
+
+  nix-check:
+    name: Nix Flake Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check flake
+        run: |
+          nix flake check --show-trace
+          echo "✅ Flake check passed"
+
+      - name: Show flake metadata
+        run: |
+          nix flake metadata
+          echo "✅ Flake metadata displayed"
