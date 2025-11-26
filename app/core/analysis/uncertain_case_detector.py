@@ -113,7 +113,10 @@ class UncertainCaseDetector:
         )
 
         # Remove duplicates while preserving order
-        # Use (name, line_number, class_name) as unique identifier instead of the object itself
+        # NOTE: TestFunctionInfo objects are unhashable (contain mutable fields like lists)
+        # so we cannot use them directly in a set. Instead, we use a tuple of immutable
+        # identifiers (name, line_number, class_name) which uniquely identifies each function
+        # within a file and is guaranteed to be hashable.
         seen = set()
         result = []
         for func in uncertain_functions:
