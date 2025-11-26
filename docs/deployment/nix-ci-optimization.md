@@ -241,17 +241,26 @@ act push
 retention-days: 7  # Instead of 1
 ```
 
-### Issue: "Magic Nix Cache not working"
+### Issue: "Magic Nix Cache not working" or "FlakeHub registration required"
 
-**Cause:** Cache action may require GitHub Actions permissions
+**Error message:**
+```
+FlakeHub registration required.
+Unable to authenticate to FlakeHub.
+```
+
+**Cause:** Missing GitHub Actions permissions for Magic Nix Cache authentication
 
 **Solution:**
+The workflow already includes the required permissions at the top level:
 ```yaml
-# Add permissions to workflow
+# Add permissions to workflow (at workflow level, not job level)
 permissions:
   contents: read
-  id-token: write  # Required for Magic Nix Cache
+  id-token: write  # Required for Magic Nix Cache authentication
 ```
+
+**Important:** You do NOT need to register at FlakeHub.com for basic usage. The Magic Nix Cache is free for public repositories and only requires proper GitHub Actions permissions.
 
 ### Issue: "Docker load failed"
 
