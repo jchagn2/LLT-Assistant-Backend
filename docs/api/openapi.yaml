@@ -251,6 +251,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /context/projects/{project_id}:
+    get:
+      summary: Get Full Project Data
+      description: |
+        Retrieve complete project data including all files and their symbols.
+        Used for frontend "graceful recovery" when local cache is outdated.
+
+        The response structure mirrors the initialization request format,
+        allowing the frontend to fully rebuild its local symbol cache.
+
+        **Performance Note:** For very large projects (10k+ symbols),
+        consider implementing pagination in the future.
+      operationId: getProjectData
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      responses:
+        '200':
+          description: Project data retrieved successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDataResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /context/projects/{project_id}/status:
     get:
       summary: Get Project Status
@@ -774,6 +821,53 @@ components:
           type: integer
           description: Current backend version for optimistic locking
 
+    ProjectDataResponse:
+      type: object
+      required:
+        - project_id
+        - version
+        - files
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        version:
+          type: integer
+          description: |
+            Current backend version number.
+            Frontend must update its local version to this value after receiving this response.
+        workspace_path:
+          type: string
+          description: Absolute path to workspace directory (if available)
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileSymbols'
+          description: |
+            List of all project files with their symbols.
+            Structure is identical to the files array in InitializeProjectRequest.
+      example:
+        project_id: "inc-test-1764069594"
+        version: 3
+        workspace_path: "/Users/user/my-project"
+        files:
+          - path: "src/services.py"
+            symbols:
+              - name: "get_user"
+                kind: "function"
+                signature: "(user_id: int) -> dict"
+                line_start: 5
+                line_end: 11
+                calls: []
+          - path: "src/utils.py"
+            symbols:
+              - name: "helper_func"
+                kind: "function"
+                signature: "() -> bool"
+                line_start: 2
+                line_end: 4
+                calls: []
+
     # ----------------------------------------
     # Feature 1 Schemas
     # ----------------------------------------
@@ -801,6 +895,25 @@ components:
               default: new
             target_function:
               type: string
+        debug_options:
+          type: object
+          description: |
+            **For Development and Testing ONLY**
+            Debug configuration to simulate task failures.
+            WARNING: Never use in production environments.
+          properties:
+            simulate_error:
+              type: boolean
+              default: false
+              description: If true, immediately fail the task without executing business logic
+            error_message:
+              type: string
+              default: "Simulated error for testing purposes"
+              description: Custom error message to return when simulating failure
+            error_code:
+              type: string
+              default: "SIMULATED_ERROR"
+              description: Optional error code for testing error handling
 
     GenerateTestsResult:
       type: object
@@ -843,6 +956,25 @@ components:
           type: string
           enum: [pytest, unittest]
           default: pytest
+        debug_options:
+          type: object
+          description: |
+            **For Development and Testing ONLY**
+            Debug configuration to simulate task failures.
+            WARNING: Never use in production environments.
+          properties:
+            simulate_error:
+              type: boolean
+              default: false
+              description: If true, immediately fail the task without executing business logic
+            error_message:
+              type: string
+              default: "Simulated error for testing purposes"
+              description: Custom error message to return when simulating failure
+            error_code:
+              type: string
+              default: "SIMULATED_ERROR"
+              description: Optional error code for testing error handling
 
     CoverageOptimizationResult:
       type: object
