@@ -644,5 +644,150 @@ docker-compose build --no-cache backend
 
 ---
 
+## 13. Nix Build System (Experimental)
+
+### 13.1 Overview
+
+The project supports two build systems:
+- **Primary:** uv + hatchling (production use)
+- **Experimental:** Nix + poetry2nix (POC for reproducible builds)
+
+This dual-system approach allows gradual evaluation of Nix without disrupting the existing workflow.
+
+### 13.2 Building with Nix
+
+**Prerequisites:**
+```bash
+# Install Nix (if not already installed)
+sh <(curl -L https://nixos.org/nix/install) --daemon
+
+# Enable experimental features
+export NIX_CONFIG="experimental-features = nix-command flakes"
+```
+
+**Build Commands:**
+```bash
+# Build Python application
+nix build .
+
+# Verify build output
+./result/bin/python --version
+
+# Build Docker image
+nix build .#dockerImage
+
+# Load Docker image
+docker load < result
+```
+
+### 13.3 Development Shell
+
+Enter a Nix development shell with all dependencies:
+
+```bash
+nix develop
+
+# Inside the shell, you have access to:
+# - poetry
+# - python3.11
+# - All project dependencies
+```
+
+### 13.4 CI/CD Workflows
+
+The project runs two parallel CI workflows:
+
+1. **Traditional workflow** (`.github/workflows/tests.yml`)
+   - Uses uv + hatchling
+   - Primary production pipeline
+
+2. **Nix workflow** (`.github/workflows/nix-build.yml`)
+   - Uses Nix + poetry2nix
+   - Experimental validation
+   - Triggers on:
+     - Push to `dev` branch
+     - Push to `feat/**` branches
+     - Pull requests to `dev` branch
+
+Both workflows run independently and must pass for production deployments.
+
+### 13.5 File Structure
+
+**New files added for Nix:**
+- `poetry.lock` - Poetry lock file (generated from pyproject.toml)
+- `flake.nix` - Nix flake definition
+- `flake.lock` - Nix dependency lock file
+- `.gitattributes` - Marks lock files as linguist-generated
+- `.github/workflows/nix-build.yml` - Nix CI workflow
+
+**Unchanged files:**
+- `pyproject.toml` - Still uses hatchling build-system
+- `uv.lock` - Primary dependency lock file
+- `Dockerfile` - Traditional Docker build
+- `.github/workflows/tests.yml` - Primary CI workflow
+- All application code in `app/`
+
+### 13.6 Dependency Management
+
+**Important:** Both `poetry.lock` and `uv.lock` must be kept in sync manually.
+
+When adding new dependencies:
+1. Update `pyproject.toml`
+2. Regenerate uv lock: `uv lock`
+3. Regenerate poetry lock: `poetry lock`
+4. Update flake: `nix flake lock --update-input nixpkgs`
+
+### 13.7 Troubleshooting
+
+**Issue: "poetry: command not found"**
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+# Add to ~/.zshrc or ~/.bashrc
+```
+
+**Issue: "nix: command not found"**
+```bash
+# Source nix daemon
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+```
+
+**Issue: Nix build fails**
+```bash
+# Show detailed build log
+nix build . --show-trace
+
+# Check flake syntax
+nix flake check
+```
+
+**Issue: Docker image build fails on macOS**
+This is expected behavior. Docker images are Linux-specific. Use GitHub Actions (Linux runner) for full validation. On macOS, only validate `nix build .` (the Python app).
+
+### 13.8 Performance Comparison (TODO)
+
+After POC validation, compare:
+- CI build times: uv vs Nix
+- Docker image sizes
+- Rebuild times with caching
+- Developer experience
+
+### 13.9 Migration Path
+
+**If Nix POC succeeds:**
+1. Enable cachix for faster CI builds
+2. Gradually migrate production builds to Nix
+3. Update documentation and team training
+4. Eventually deprecate uv-based workflow
+
+**If Nix POC fails:**
+1. Archive feat/nix-poc branch
+2. Remove Nix-specific files
+3. Continue with uv + hatchling
+4. Document lessons learned
+
+**Rollback is simple:** Delete Nix files and branch. Zero impact on existing build system.
+
+---
+
 **Last Updated:** 2025-11-26
-**Version:** 1.4
+**Version:** 1.5
