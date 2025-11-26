@@ -11,11 +11,14 @@ from app.core.constants import (
     ACTION_REMOVE,
     ACTION_REPLACE,
     DETECTED_BY_RULE_ENGINE,
+    EXTERNAL_DEPENDENCY_PATTERNS,
     ISSUE_TYPE_MISSING_ASSERTION,
+    ISSUE_TYPE_MISSING_MOCK,
     ISSUE_TYPE_REDUNDANT_ASSERTION,
     ISSUE_TYPE_TRIVIAL_ASSERTION,
     ISSUE_TYPE_UNUSED_FIXTURE,
     ISSUE_TYPE_UNUSED_VARIABLE,
+    MOCK_INDICATOR_PATTERNS,
     Severity,
 )
 
@@ -415,17 +418,214 @@ class UnusedVariableRule(Rule):
         return 1  # Default to first line if not found
 
 
+class MissingMockRule(Rule):
+    """Detect test functions calling external dependencies without proper mocking.
+
+    This rule uses graph-based dependency analysis to find functions that call
+    external services (database, API, file I/O) without proper mock setup.
+    """
+
+    def __init__(self):
+        super().__init__(
+            rule_id=ISSUE_TYPE_MISSING_MOCK,
+            severity=Severity.WARNING.value,
+            message_template="Test calls external dependency without mocking",
+        )
+        # Graph dependency data will be injected before analysis
+        self._dependency_data: dict = {}
+
+    def set_dependency_data(self, data: dict) -> None:
+        """Set graph-based dependency data for test functions.
+
+        Args:
+            data: Dictionary mapping test function names to their dependencies
+                  Example: {"test_save_user": ["save_to_db", "send_email"]}
+        """
+        self._dependency_data = data
+
+    def check(self, parsed_file: ParsedTestFile) -> List[Issue]:
+        """Check for missing mocks in test functions."""
+        issues = []
+
+        # Check module-level test functions
+        for test_func in parsed_file.test_functions:
+            issues.extend(self._check_function(test_func, parsed_file))
+
+        # Check test class methods
+        for test_class in parsed_file.test_classes:
+            for test_method in test_class.methods:
+                issues.extend(self._check_function(test_method, parsed_file))
+
+        return issues
+
+    def _check_function(
+        self, test_func: TestFunctionInfo, parsed_file: ParsedTestFile
+    ) -> List[Issue]:
+        """Check a single test function for missing mocks."""
+        issues = []
+
+        # Check if test has mock indicators
+        has_mocking = self._has_mock_indicators(test_func, parsed_file)
+
+        # Get dependencies - prefer graph data, fallback to AST analysis
+        dependencies = self._get_dependencies(test_func)
+
+        # Find external dependencies that may need mocking
+        external_deps = self._find_external_dependencies(dependencies)
+
+        if external_deps and not has_mocking:
+            suggestion = IssueSuggestion(
+                action=ACTION_ADD,
+                old_code=None,
+                new_code=self._generate_mock_suggestion(external_deps),
+                explanation=(
+                    f"Add mocks for external dependencies: {', '.join(external_deps)}. "
+                    "This ensures tests are isolated and deterministic."
+                ),
+            )
+
+            issues.append(
+                self.create_issue(
+                    file_path=parsed_file.file_path,
+                    line=test_func.line_number,
+                    message=(
+                        f"Test '{test_func.name}' calls external dependencies "
+                        f"({', '.join(external_deps)}) without proper mocking"
+                    ),
+                    suggestion=suggestion,
+                )
+            )
+
+        return issues
+
+    def _has_mock_indicators(
+        self, test_func: TestFunctionInfo, parsed_file: ParsedTestFile
+    ) -> bool:
+        """Check if test function has mock-related setup.
+
+        Looks for:
+        - @patch decorators
+        - Mock-related fixture parameters
+        - Mock imports in the file
+        - Mock usage in source code
+        """
+        # Check decorators
+        for decorator in test_func.decorators:
+            for pattern in MOCK_INDICATOR_PATTERNS:
+                if pattern.lower() in decorator.lower():
+                    return True
+
+        # Check parameters (fixture injection)
+        for param in test_func.parameters:
+            for pattern in MOCK_INDICATOR_PATTERNS:
+                if pattern.lower() in param.lower():
+                    return True
+
+        # Check source code for mock usage
+        source_lower = test_func.source_code.lower()
+        for pattern in MOCK_INDICATOR_PATTERNS:
+            if pattern.lower() in source_lower:
+                return True
+
+        # Check file imports
+        for imp in parsed_file.imports:
+            for pattern in MOCK_INDICATOR_PATTERNS:
+                if pattern.lower() in imp.lower():
+                    return True
+
+        return False
+
+    def _get_dependencies(self, test_func: TestFunctionInfo) -> List[str]:
+        """Get dependencies for a test function.
+
+        Uses graph data if available, otherwise falls back to AST analysis.
+        """
+        # Try graph data first
+        if test_func.name in self._dependency_data:
+            return self._dependency_data[test_func.name]
+
+        # Fallback: Extract function calls from AST
+        return self._extract_function_calls_from_ast(test_func)
+
+    def _extract_function_calls_from_ast(
+        self, test_func: TestFunctionInfo
+    ) -> List[str]:
+        """Extract function calls from test function source code using AST."""
+        calls = []
+
+        try:
+            func_ast = ast.parse(test_func.source_code)
+
+            for node in ast.walk(func_ast):
+                if isinstance(node, ast.Call):
+                    # Get the function name
+                    if isinstance(node.func, ast.Name):
+                        calls.append(node.func.id)
+                    elif isinstance(node.func, ast.Attribute):
+                        calls.append(node.func.attr)
+
+        except SyntaxError:
+            pass
+
+        return list(set(calls))
+
+    def _find_external_dependencies(self, dependencies: List[str]) -> List[str]:
+        """Filter dependencies to find external ones that likely need mocking."""
+        external = []
+
+        for dep in dependencies:
+            dep_lower = dep.lower()
+            for pattern in EXTERNAL_DEPENDENCY_PATTERNS:
+                if (
+                    dep_lower.startswith(pattern.lower())
+                    or pattern.lower() in dep_lower
+                ):
+                    external.append(dep)
+                    break
+
+        return external
+
+    def _generate_mock_suggestion(self, external_deps: List[str]) -> str:
+        """Generate mock setup suggestion code."""
+        if not external_deps:
+            return ""
+
+        # Generate @patch decorators for each dependency
+        patches = []
+        for dep in external_deps[:3]:  # Limit to first 3
+            patches.append(f'@patch("module.{dep}")')
+
+        patch_code = "\n".join(patches)
+        return (
+            f"{patch_code}\n"
+            f"def test_with_mocks(self, {'mock_' + ', mock_'.join(external_deps[:3])}):\n"
+            f"    # Configure mock return values\n"
+            f"    # mock_{external_deps[0]}.return_value = expected_value"
+        )
+
+
 class RuleEngine:
     """Orchestrates all detection rules."""
 
     def __init__(self):
+        self._missing_mock_rule = MissingMockRule()
         self.rules = [
             RedundantAssertionRule(),
             MissingAssertionRule(),
             TrivialAssertionRule(),
             UnusedFixtureRule(),
             UnusedVariableRule(),
+            self._missing_mock_rule,
         ]
+
+    def set_graph_dependency_data(self, data: dict) -> None:
+        """Set graph-based dependency data for mock detection.
+
+        Args:
+            data: Dictionary mapping test function names to their dependencies
+                  Example: {"test_save_user": ["save_to_db", "send_email"]}
+        """
+        self._missing_mock_rule.set_dependency_data(data)
 
     def analyze(self, parsed_file: ParsedTestFile) -> List[Issue]:
         """Run all rules and aggregate issues."""

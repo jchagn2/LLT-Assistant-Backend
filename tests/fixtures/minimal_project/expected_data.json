@@ -1,0 +1,137 @@
+{
+  "description": "Expected Neo4j data for minimal test project validation",
+  "project_id": "minimal-test-project",
+
+  "symbols": {
+    "total_count": 6,
+    "by_file": {
+      "utils.py": ["calculate_tax", "format_price"],
+      "service.py": ["get_total_price", "display_price"],
+      "test_service.py": ["test_get_total_price", "test_display_price"]
+    },
+    "details": [
+      {
+        "name": "calculate_tax",
+        "qualified_name": "tests/fixtures/minimal_project/utils.py::calculate_tax",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/utils.py",
+        "line_start": 9,
+        "line_end": 20
+      },
+      {
+        "name": "format_price",
+        "qualified_name": "tests/fixtures/minimal_project/utils.py::format_price",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/utils.py",
+        "line_start": 23,
+        "line_end": 33
+      },
+      {
+        "name": "get_total_price",
+        "qualified_name": "tests/fixtures/minimal_project/service.py::get_total_price",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/service.py",
+        "line_start": 10,
+        "line_end": 25
+      },
+      {
+        "name": "display_price",
+        "qualified_name": "tests/fixtures/minimal_project/service.py::display_price",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/service.py",
+        "line_start": 28,
+        "line_end": 43
+      },
+      {
+        "name": "test_get_total_price",
+        "qualified_name": "tests/fixtures/minimal_project/test_service.py::test_get_total_price",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/test_service.py",
+        "line_start": 10,
+        "line_end": 18
+      },
+      {
+        "name": "test_display_price",
+        "qualified_name": "tests/fixtures/minimal_project/test_service.py::test_display_price",
+        "kind": "function",
+        "file_path": "tests/fixtures/minimal_project/test_service.py",
+        "line_start": 21,
+        "line_end": 29
+      }
+    ]
+  },
+
+  "calls": {
+    "total_count": 5,
+    "relationships": [
+      {
+        "caller": "get_total_price",
+        "caller_qualified_name": "tests/fixtures/minimal_project/service.py::get_total_price",
+        "callee": "calculate_tax",
+        "callee_qualified_name": "tests/fixtures/minimal_project/utils.py::calculate_tax",
+        "line": 23,
+        "description": "service.get_total_price calls utils.calculate_tax"
+      },
+      {
+        "caller": "display_price",
+        "caller_qualified_name": "tests/fixtures/minimal_project/service.py::display_price",
+        "callee": "get_total_price",
+        "callee_qualified_name": "tests/fixtures/minimal_project/service.py::get_total_price",
+        "line": 41,
+        "description": "service.display_price calls service.get_total_price (internal)"
+      },
+      {
+        "caller": "display_price",
+        "caller_qualified_name": "tests/fixtures/minimal_project/service.py::display_price",
+        "callee": "format_price",
+        "callee_qualified_name": "tests/fixtures/minimal_project/utils.py::format_price",
+        "line": 42,
+        "description": "service.display_price calls utils.format_price"
+      },
+      {
+        "caller": "test_get_total_price",
+        "caller_qualified_name": "tests/fixtures/minimal_project/test_service.py::test_get_total_price",
+        "callee": "get_total_price",
+        "callee_qualified_name": "tests/fixtures/minimal_project/service.py::get_total_price",
+        "line": 16,
+        "description": "test_service.test_get_total_price calls service.get_total_price"
+      },
+      {
+        "caller": "test_display_price",
+        "caller_qualified_name": "tests/fixtures/minimal_project/test_service.py::test_display_price",
+        "callee": "display_price",
+        "callee_qualified_name": "tests/fixtures/minimal_project/service.py::display_price",
+        "line": 27,
+        "description": "test_service.test_display_price calls service.display_price"
+      }
+    ]
+  },
+
+  "expected_queries": {
+    "forward_dependencies": {
+      "display_price": {
+        "depth_1": ["get_total_price", "format_price"],
+        "depth_2": ["get_total_price", "format_price", "calculate_tax"]
+      },
+      "get_total_price": {
+        "depth_1": ["calculate_tax"]
+      },
+      "test_display_price": {
+        "depth_1": ["display_price"],
+        "depth_2": ["display_price", "get_total_price", "format_price"]
+      }
+    },
+    "reverse_dependencies": {
+      "calculate_tax": ["get_total_price"],
+      "format_price": ["display_price"],
+      "get_total_price": ["display_price", "test_get_total_price"],
+      "display_price": ["test_display_price"]
+    }
+  },
+
+  "validation_notes": {
+    "root_functions": ["calculate_tax", "format_price"],
+    "leaf_functions": ["test_get_total_price", "test_display_price"],
+    "internal_calls": ["display_price -> get_total_price"]
+  }
+}

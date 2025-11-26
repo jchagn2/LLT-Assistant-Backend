@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from app.analyzers.ast_parser import ParsedTestFile, parse_test_file
 from app.api.v1.schemas import (
@@ -20,6 +20,9 @@ from app.api.v1.schemas import (
 )
 from app.core.analysis.strategies import get_strategy
 from app.core.protocols import LLMAnalyzerProtocol, RuleEngineProtocol
+
+if TYPE_CHECKING:
+    from app.core.graph.graph_service import GraphService
 
 logger = logging.getLogger(__name__)
 
@@ -243,13 +246,16 @@ class ImpactAnalyzer:
     """Impact analysis analyzer for determining affected test files.
 
     This analyzer takes project context (changed files and related tests)
-    and determines which tests may be impacted by the changes.
+    and determines which tests may be impacted by the changes using
+    graph-based dependency analysis.
     """
 
     def __init__(
         self,
         rule_engine: RuleEngineProtocol,
         llm_analyzer: LLMAnalyzerProtocol,
+        graph_service: Optional["GraphService"] = None,
+        project_id: str = "default",
     ):
         """
         Initialize the impact analyzer.
@@ -257,18 +263,22 @@ class ImpactAnalyzer:
         Args:
             rule_engine: Rule-based analysis engine
             llm_analyzer: LLM-based analyzer (for future enhancement)
+            graph_service: Optional GraphService for dependency queries
+            project_id: Project identifier for graph queries
         """
         self.rule_engine = rule_engine
         self.llm_analyzer = llm_analyzer
+        self.graph_service = graph_service
+        self.project_id = project_id
 
     def analyze_impact(
         self, files_changed: List[Dict[str, str]], related_tests: List[str]
     ) -> ImpactAnalysisResponse:
         """
-        Analyze the impact of file changes on test files.
+        Analyze the impact of file changes on test files (sync wrapper).
 
-        This method uses a combination of heuristics and rules to determine
-        which tests are impacted by the changes.
+        This method is kept for backward compatibility. For graph-based
+        analysis, use analyze_impact_async instead.
 
         Args:
             files_changed: List of dictionaries with 'path' and 'change_type'
@@ -279,35 +289,73 @@ class ImpactAnalyzer:
 
         Raises:
             ValueError: If files_changed is empty
+            RuntimeError: If graph_service is configured but async context unavailable
         """
+        if self.graph_service is not None:
+            raise RuntimeError(
+                "ImpactAnalyzer has graph_service configured. "
+                "Use analyze_impact_async() instead for graph-based analysis."
+            )
+
+        return self._analyze_impact_sync(files_changed, related_tests)
+
+    async def analyze_impact_async(
+        self,
+        files_changed: List[Dict[str, str]],
+        related_tests: List[str],
+        git_diff: Optional[str] = None,
+    ) -> ImpactAnalysisResponse:
+        """
+        Analyze the impact of file changes using graph-based dependency analysis.
+
+        This method uses the Neo4j graph database to find reverse dependencies
+        (functions that call the modified functions) for accurate impact assessment.
+
+        Args:
+            files_changed: List of dictionaries with 'path' and 'change_type'
+            related_tests: List of test file paths that may be related
+            git_diff: Optional git diff content for function-level analysis
+
+        Returns:
+            ImpactAnalysisResponse with impact assessment
+
+        Raises:
+            ValueError: If files_changed is empty
+            RuntimeError: If graph_service is not configured
+        """
+        if self.graph_service is None:
+            raise RuntimeError(
+                "graph_service is required for analyze_impact_async(). "
+                "Either configure graph_service or use analyze_impact() instead."
+            )
+
         if not files_changed:
             raise ValueError("files_changed cannot be empty")
 
-        # Basic validation
         changed_paths = [f.get("path", "") for f in files_changed]
         if not any(changed_paths):
             raise ValueError("files_changed paths cannot be empty")
 
         logger.info(
-            f"Analyzing impact for {len(files_changed)} changed files and "
-            f"{len(related_tests)} related tests"
+            "Analyzing impact (graph-based) for %d changed files, project=%s",
+            len(files_changed),
+            self.project_id,
         )
 
         try:
-            # For now, use simple heuristics. In the future, this could use:
-            # 1. Rule engine for pattern matching
-            # 2. LLM for semantic analysis
-            # 3. Import graph analysis
-            impacted_tests = self._calculate_impact_simple(changed_paths, related_tests)
+            impacted_tests = await self._calculate_impact_graph_based(
+                files_changed, related_tests, git_diff
+            )
 
-            # Determine overall severity and suggested action
             severity, suggested_action = self._determine_severity_and_action(
                 impacted_tests
             )
 
             logger.info(
-                f"Impact analysis completed: {len(impacted_tests)} tests impacted, "
-                f"severity={severity}, action={suggested_action}"
+                "Impact analysis completed: %d tests impacted, severity=%s, action=%s",
+                len(impacted_tests),
+                severity,
+                suggested_action,
             )
 
             return ImpactAnalysisResponse(
@@ -317,8 +365,294 @@ class ImpactAnalyzer:
             )
 
         except Exception as e:
-            logger.error(f"Impact analysis failed: {e}")
+            logger.error("Impact analysis failed: %s", e, exc_info=True)
             raise
+
+    def _analyze_impact_sync(
+        self, files_changed: List[Dict[str, str]], related_tests: List[str]
+    ) -> ImpactAnalysisResponse:
+        """Synchronous impact analysis using heuristics (legacy method)."""
+        if not files_changed:
+            raise ValueError("files_changed cannot be empty")
+
+        changed_paths = [f.get("path", "") for f in files_changed]
+        if not any(changed_paths):
+            raise ValueError("files_changed paths cannot be empty")
+
+        logger.info(
+            "Analyzing impact (heuristic) for %d changed files and %d related tests",
+            len(files_changed),
+            len(related_tests),
+        )
+
+        try:
+            impacted_tests = self._calculate_impact_simple(changed_paths, related_tests)
+
+            severity, suggested_action = self._determine_severity_and_action(
+                impacted_tests
+            )
+
+            logger.info(
+                "Impact analysis completed: %d tests impacted, severity=%s, action=%s",
+                len(impacted_tests),
+                severity,
+                suggested_action,
+            )
+
+            return ImpactAnalysisResponse(
+                impacted_tests=impacted_tests,
+                severity=severity,
+                suggested_action=suggested_action,
+            )
+
+        except Exception as e:
+            logger.error("Impact analysis failed: %s", e)
+            raise
+
+    async def _calculate_impact_graph_based(
+        self,
+        files_changed: List[Dict[str, str]],
+        related_tests: List[str],
+        git_diff: Optional[str] = None,
+    ) -> List[ImpactItem]:
+        """
+        Calculate impact using graph-based reverse dependency analysis.
+
+        This method queries the Neo4j graph to find all functions that call
+        the modified functions, allowing precise impact assessment.
+
+        Enhanced to classify changes as functional vs non-functional.
+
+        Args:
+            files_changed: List of changed files with paths
+            related_tests: List of potentially related test files
+            git_diff: Optional git diff for function-level extraction
+
+        Returns:
+            List of ImpactItem with graph-based impact assessments
+        """
+        impacted_tests: List[ImpactItem] = []
+        processed_test_paths: set = set()
+        changed_paths = [f.get("path", "") for f in files_changed]
+
+        # Extract AND classify changes from git diff if provided
+        functional_changes = []
+        non_functional_changes = []
+
+        if git_diff:
+            from app.core.utils.diff_parser import (
+                extract_and_classify_modified_functions,
+            )
+
+            classified_changes = extract_and_classify_modified_functions(
+                git_diff, use_ast=True  # Hybrid mode
+            )
+
+            logger.debug(
+                "Classified %d changes: %d functional, %d non-functional, %d mixed",
+                len(classified_changes),
+                sum(1 for c in classified_changes if c.change_type == "functional"),
+                sum(1 for c in classified_changes if c.change_type == "non-functional"),
+                sum(1 for c in classified_changes if c.change_type == "mixed"),
+            )
+
+            # Separate functional and non-functional changes
+            # Treat "mixed" as functional for safety
+            functional_changes = [
+                c
+                for c in classified_changes
+                if c.change_type in ["functional", "mixed"]
+            ]
+            non_functional_changes = [
+                c for c in classified_changes if c.change_type == "non-functional"
+            ]
+
+        # Process FUNCTIONAL changes with graph queries
+        for change in functional_changes:
+            func_name = change.function_name
+            try:
+                result = await self.graph_service.query_reverse_dependencies(
+                    function_name=func_name,
+                    project_id=self.project_id,
+                )
+
+                if result["function"] is None:
+                    logger.debug("Function %s not found in graph", func_name)
+                    continue
+
+                # Process callers - each caller might be a test or call from a test
+                for caller in result["callers"]:
+                    caller_path = caller.get("file_path", "")
+                    caller_name = caller.get("name", "")
+
+                    # Check if caller is in a test file
+                    is_test_file = (
+                        "test" in caller_path.lower()
+                        or caller_path.endswith("_test.py")
+                        or caller_name.startswith("test_")
+                    )
+
+                    if is_test_file and caller_path not in processed_test_paths:
+                        impacted_tests.append(
+                            ImpactItem(
+                                test_path=caller_path,
+                                impact_score=0.9,
+                                severity="high",
+                                reasons=[
+                                    f"Test calls modified function '{func_name}' "
+                                    f"(via graph analysis)"
+                                ],
+                            )
+                        )
+                        processed_test_paths.add(caller_path)
+                    elif not is_test_file:
+                        # Caller is not a test - need to check if any test calls this caller
+                        # This handles transitive dependencies
+                        transitive_result = (
+                            await self.graph_service.query_reverse_dependencies(
+                                function_name=caller_name,
+                                project_id=self.project_id,
+                            )
+                        )
+
+                        for transitive_caller in transitive_result.get("callers", []):
+                            trans_path = transitive_caller.get("file_path", "")
+                            trans_name = transitive_caller.get("name", "")
+
+                            is_trans_test = (
+                                "test" in trans_path.lower()
+                                or trans_path.endswith("_test.py")
+                                or trans_name.startswith("test_")
+                            )
+
+                            if is_trans_test and trans_path not in processed_test_paths:
+                                impacted_tests.append(
+                                    ImpactItem(
+                                        test_path=trans_path,
+                                        impact_score=0.7,
+                                        severity="medium",
+                                        reasons=[
+                                            f"Test calls '{caller_name}' which calls "
+                                            f"modified function '{func_name}' "
+                                            f"(transitive dependency)"
+                                        ],
+                                    )
+                                )
+                                processed_test_paths.add(trans_path)
+
+            except Exception as e:
+                logger.warning(
+                    "Failed to query reverse dependencies for %s: %s",
+                    func_name,
+                    e,
+                )
+
+        # Process NON-FUNCTIONAL changes (mark as informational, no graph queries)
+        for change in non_functional_changes:
+            # Infer corresponding test file
+            test_path = self._infer_test_path_from_file(change.file_path)
+
+            if test_path and test_path not in processed_test_paths:
+                impacted_tests.append(
+                    ImpactItem(
+                        test_path=test_path,
+                        impact_score=0.1,  # Very low impact
+                        severity="informational",
+                        reasons=[
+                            f"Non-functional change in {change.function_name}: "
+                            f"{', '.join(change.reasons)}"
+                        ],
+                    )
+                )
+                processed_test_paths.add(test_path)
+
+        # Also check for direct test file modifications
+        for changed_path in changed_paths:
+            is_test_file = "test" in changed_path.lower() or changed_path.endswith(
+                "_test.py"
+            )
+
+            if is_test_file and changed_path not in processed_test_paths:
+                impacted_tests.append(
+                    ImpactItem(
+                        test_path=changed_path,
+                        impact_score=1.0,
+                        severity="high",
+                        reasons=["Test file was directly modified"],
+                    )
+                )
+                processed_test_paths.add(changed_path)
+
+        # Add related tests that weren't found via graph with lower scores
+        for test_path in related_tests:
+            if test_path not in processed_test_paths:
+                impacted_tests.append(
+                    ImpactItem(
+                        test_path=test_path,
+                        impact_score=0.3,
+                        severity="low",
+                        reasons=["Related test (no direct dependency found in graph)"],
+                    )
+                )
+                processed_test_paths.add(test_path)
+
+        logger.info(
+            "Graph-based impact analysis found %d impacted tests",
+            len(impacted_tests),
+        )
+
+        return impacted_tests
+
+    def _infer_test_path_from_file(self, source_file: str) -> Optional[str]:
+        """
+        Infer corresponding test file path from source file.
+
+        Uses common test file naming conventions to map source files to tests.
+
+        Args:
+            source_file: Path to source file (e.g., "src/calculator.py")
+
+        Returns:
+            Inferred test file path (e.g., "tests/test_calculator.py"),
+            or None if cannot infer
+
+        Examples:
+            >>> self._infer_test_path_from_file("src/calculator.py")
+            "tests/test_calculator.py"
+            >>> self._infer_test_path_from_file("app/utils/helper.py")
+            "tests/test_helper.py"
+        """
+        # If already a test file, return it
+        if "test" in source_file.lower():
+            return source_file
+
+        # Extract filename from path
+        parts = source_file.split("/")
+        filename = parts[-1]
+
+        # Create test filename
+        if filename.endswith(".py"):
+            name_without_ext = filename[:-3]
+            test_filename = f"test_{name_without_ext}.py"
+        else:
+            return None
+
+        # Common test directory patterns
+        test_patterns = [
+            f"tests/{test_filename}",
+            f"test/{test_filename}",
+        ]
+
+        # Try to construct relative path
+        # e.g., src/module/file.py -> tests/module/test_file.py
+        if len(parts) > 1:
+            # Try to preserve directory structure under tests/
+            subpath = "/".join(parts[1:-1]) if len(parts) > 2 else ""
+            if subpath:
+                test_patterns.insert(0, f"tests/{subpath}/{test_filename}")
+
+        # Return first pattern (could be enhanced to check file existence)
+        return test_patterns[0] if test_patterns else None
 
     def _calculate_impact_simple(
         self, changed_paths: List[str], related_tests: List[str]
@@ -435,6 +769,8 @@ class ImpactAnalyzer:
         """
         Determine overall severity and suggested action based on impacts.
 
+        Enhanced to handle informational severity for non-functional changes.
+
         Args:
             impacted_tests: List of impact items
 
@@ -444,9 +780,24 @@ class ImpactAnalyzer:
         if not impacted_tests:
             return "none", "no-action"
 
-        # Check for high severity impacts
-        high_impact_tests = [it for it in impacted_tests if it.severity == "high"]
-        medium_impact_tests = [it for it in impacted_tests if it.severity == "medium"]
+        # Filter out informational impacts for severity calculation
+        # Informational-only changes should not trigger test runs
+        significant_tests = [
+            t for t in impacted_tests if t.severity not in ["informational", "none"]
+        ]
+
+        # If only informational changes, return informational severity
+        if not significant_tests:
+            if any(t.severity == "informational" for t in impacted_tests):
+                return "informational", "no-action"
+            else:
+                return "none", "no-action"
+
+        # Check for high severity impacts among significant tests
+        high_impact_tests = [it for it in significant_tests if it.severity == "high"]
+        medium_impact_tests = [
+            it for it in significant_tests if it.severity == "medium"
+        ]
 
         if len(high_impact_tests) > 2:
             # Multiple high impact tests -> high severity, run all tests

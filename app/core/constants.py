@@ -55,6 +55,58 @@ ISSUE_TYPE_UNUSED_VARIABLE = "unused-variable"
 ISSUE_TYPE_MERGEABLE_TESTS = "mergeable-tests"
 ISSUE_TYPE_WEAK_ASSERTION = "weak-assertion"
 ISSUE_TYPE_TEST_SMELL = "test-smell"
+ISSUE_TYPE_MISSING_MOCK = "missing-mock"
+
+# External dependency patterns (used for mock detection)
+EXTERNAL_DEPENDENCY_PATTERNS = [
+    # Database operations
+    "save_",
+    "load_",
+    "create_",
+    "update_",
+    "delete_",
+    "query_",
+    "insert_",
+    "select_",
+    "execute_",
+    "commit_",
+    "rollback_",
+    # API/Network operations
+    "fetch_",
+    "request_",
+    "send_",
+    "post_",
+    "get_",
+    "put_",
+    "call_api",
+    "http_",
+    "connect_",
+    "disconnect_",
+    # File operations
+    "read_file",
+    "write_file",
+    "open_",
+    "close_",
+    # External services
+    "email_",
+    "sms_",
+    "notify_",
+    "publish_",
+    "subscribe_",
+]
+
+# Mock indicator patterns (suggests test has proper mocking)
+MOCK_INDICATOR_PATTERNS = [
+    "mock",
+    "patch",
+    "Mock",
+    "MagicMock",
+    "AsyncMock",
+    "mocker",
+    "monkeypatch",
+    "fake_",
+    "stub_",
+]
 
 # Detection sources
 DETECTED_BY_RULE_ENGINE = "rule_engine"
