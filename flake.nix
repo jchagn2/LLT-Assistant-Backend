@@ -30,20 +30,12 @@
           projectRoot = ./.;
         };
 
-        # Python package set with pyproject.nix packages
-        pythonSet = (pkgs.callPackage pyproject-nix.build.packages {
-          inherit python;
-        }).overrideScope (final: prev: (
-          pkgs.callPackage pyproject-build-systems.build.packages {
-            inherit (final) pkgs;
-          }
-        ));
-
         # Render build attributes for buildPythonPackage
         attrs = project.renderers.buildPythonPackage { inherit python; };
 
-        # Custom Python environment with our package
-        app = pythonSet.pythonPkgsHostHost.buildPythonPackage (attrs // {
+        # Build the application using standard nixpkgs buildPythonPackage
+        # pyproject.nix renders the attributes, nixpkgs provides the builder
+        app = python.pkgs.buildPythonPackage (attrs // {
           # Override version (required when not using dynamic versioning)
           version = "0.1.0";
 
