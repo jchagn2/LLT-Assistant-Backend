@@ -9,6 +9,11 @@ on:
     branches:
       - dev
 
+# Required permissions for Magic Nix Cache
+permissions:
+  id-token: write
+  contents: read
+
 # Optimized CI/CD pipeline with job dependencies and caching
 # Architecture: check → build → docker → test (sequential with caching)
 jobs:
