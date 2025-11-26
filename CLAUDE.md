@@ -590,5 +590,59 @@ Phase 2.2 (Feature 4 Enhancement): ✅ 4/4 tasks complete
 
 ---
 
-**Last Updated:** 2025-11-25
-**Version:** 1.3
+**Last Updated:** 2025-11-26
+**Version:** 1.4
+
+---
+
+## 12. Docker Development Workflow
+
+### 12.1 Code Change Deployment
+
+**CRITICAL:** When modifying backend API code, you MUST rebuild Docker images and restart containers for changes to take effect.
+
+**Workflow:**
+```bash
+# After making code changes
+docker-compose build backend
+docker-compose up -d
+
+# Verify changes took effect
+docker logs llt-assistant-backend-backend-1 --tail 50
+```
+
+**Common Mistake:** Editing code without rebuilding Docker images. Changes will NOT be reflected in running containers until you rebuild and restart.
+
+### 12.2 Development Best Practices
+
+1. **Always rebuild after code changes:** Any modification to Python files in `app/` directory requires image rebuild
+2. **Check container logs:** Use `docker logs` to verify the new code is running
+3. **Restart services individually:** Use `docker-compose restart backend` for faster restarts without full rebuild (only works if dependencies haven't changed)
+4. **Clean rebuild:** If issues persist, use `docker-compose build --no-cache backend` for a clean rebuild
+
+### 12.3 Common Development Commands
+
+```bash
+# View running containers
+docker ps
+
+# View container logs (real-time)
+docker logs -f llt-assistant-backend-backend-1
+
+# Restart specific service
+docker-compose restart backend
+
+# Stop all services
+docker-compose down
+
+# Rebuild and restart
+docker-compose build backend && docker-compose up -d
+
+# Clean rebuild (no cache)
+docker-compose build --no-cache backend
+```
+
+---
+
+**Last Updated:** 2025-11-26
+**Version:** 1.4

@@ -132,12 +132,19 @@ class QualityAnalysisService:
             # Step 6: Calculate summary statistics
             summary = self._calculate_summary(files, quality_issues)
 
+            # Step 7: Calculate severity breakdown (internal only, not in API response)
+            severity_breakdown = self._calculate_severity_breakdown(quality_issues)
+
             elapsed_ms = int((time.time() - start_time) * 1000)
             logger.info(
-                "Quality analysis completed: analysis_id=%s, issues=%d, time_ms=%d",
+                "Quality analysis completed: analysis_id=%s, issues=%d, time_ms=%d, "
+                "errors=%d, warnings=%d, info=%d",
                 analysis_id,
                 len(quality_issues),
                 elapsed_ms,
+                severity_breakdown["error"],
+                severity_breakdown["warning"],
+                severity_breakdown["info"],
             )
 
             return QualityAnalysisResponse(
@@ -299,6 +306,35 @@ class QualityAnalysisService:
             new_text=new_text,
             description=suggestion.explanation,
         )
+
+    def _calculate_severity_breakdown(
+        self, issues: List[QualityIssue]
+    ) -> dict[str, int]:
+        """
+        Calculate breakdown of issues by severity level.
+
+        This is an internal method for logging and metrics purposes.
+        The breakdown is NOT exposed in the API response.
+
+        Args:
+            issues: List of quality issues
+
+        Returns:
+            Dictionary with counts for each severity level:
+            {"error": N, "warning": M, "info": K}
+        """
+        breakdown = {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+        }
+
+        for issue in issues:
+            severity = issue.severity
+            if severity in breakdown:
+                breakdown[severity] += 1
+
+        return breakdown
 
     def _calculate_summary(
         self, files: List[FileInput], issues: List[QualityIssue]
