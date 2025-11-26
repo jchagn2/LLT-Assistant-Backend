@@ -344,8 +344,8 @@ class TestEdgeCases:
 
         response = fuzzing_client.post("/quality/analyze", json=payload)
 
-        # Should handle empty content gracefully
-        assert response.status_code in [200, 400, 422]
+        # Should reject empty content with 422 validation error
+        assert response.status_code == 422
 
     def test_analyze_only_whitespace_content(self, fuzzing_client):
         """Test analyzing file with only whitespace."""

@@ -2,14 +2,16 @@
 
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class FileInput(BaseModel):
     """Individual test file to analyze."""
 
     path: str = Field(description="File path relative to project root")
-    content: str = Field(description="Full file content")
+    content: str = Field(
+        min_length=1, description="Full file content (cannot be empty)"
+    )
     git_diff: Optional[str] = Field(
         default=None, description="Optional: only analyze changed lines"
     )
@@ -72,6 +74,26 @@ class AnalyzeResponse(BaseModel):
 # ============================================================================
 
 
+class DebugOptions(BaseModel):
+    """Optional debug configuration for development and testing ONLY.
+
+    WARNING: This should NEVER be used in production environments.
+    """
+
+    simulate_error: bool = Field(
+        default=False,
+        description="If true, immediately fail the task without executing business logic",
+    )
+    error_message: str = Field(
+        default="Simulated error for testing purposes",
+        description="Custom error message to return when simulating failure",
+    )
+    error_code: Optional[str] = Field(
+        default="SIMULATED_ERROR",
+        description="Optional error code for testing error handling",
+    )
+
+
 class GenerateTestsContext(BaseModel):
     """Context for test generation, used for regeneration scenarios."""
 
@@ -100,6 +122,10 @@ class GenerateTestsRequest(BaseModel):
     context: Optional[GenerateTestsContext] = Field(
         default=None,
         description="Extra context if triggered by Feature 3 (Regeneration)",
+    )
+    debug_options: Optional[DebugOptions] = Field(
+        default=None,
+        description="Debug configuration (For Development and Testing ONLY)",
     )
 
 
@@ -154,6 +180,10 @@ class CoverageOptimizationRequest(BaseModel):
     framework: Literal["pytest", "unittest"] = Field(
         default="pytest", description="Target testing framework"
     )
+    debug_options: Optional[DebugOptions] = Field(
+        default=None,
+        description="Debug configuration (For Development and Testing ONLY)",
+    )
 
 
 class CoverageOptimizationTest(BaseModel):
@@ -197,6 +227,39 @@ class TaskStatusResponse(BaseModel):
         default=None, description="Error details (when status=failed)"
     )
 
+    @model_serializer
+    def serialize_model(self) -> Dict[str, Any]:
+        """
+        Custom serializer to exclude null result/error fields for pending/processing status.
+
+        This prevents the API from returning result: null and error: null for tasks
+        that are still in progress, improving REST API compliance.
+        """
+        data: Dict[str, Any] = {
+            "task_id": self.task_id,
+            "status": self.status,
+        }
+
+        if self.created_at is not None:
+            data["created_at"] = self.created_at
+
+        # Only include result/error fields for completed/failed status
+        # Serialize nested Pydantic models to dict to prevent FastAPI re-serialization
+        if self.status == "completed" and self.result is not None:
+            data["result"] = (
+                self.result.model_dump(mode="json")
+                if hasattr(self.result, "model_dump")
+                else self.result
+            )
+        if self.status == "failed" and self.error is not None:
+            data["error"] = (
+                self.error.model_dump(mode="json")
+                if hasattr(self.error, "model_dump")
+                else self.error
+            )
+
+        return data
+
 
 # ============================================================================
 # Feature 3: Impact Analysis (OpenAPI compliant schemas)
@@ -231,11 +294,11 @@ class ImpactItem(BaseModel):
     impact_score: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Impact score from 0.0 to 1.0"
     )
-    severity: Literal["high", "medium", "low", "none"] = Field(
+    severity: Literal["high", "medium", "low", "informational", "none"] = Field(
         default="none", description="Impact severity level"
     )
-    reasons: Optional[List[str]] = Field(
-        default=None, description="List of reasons for the impact assessment"
+    reasons: List[str] = Field(
+        default=[], description="List of reasons for the impact assessment"
     )
 
 
@@ -245,6 +308,14 @@ class ImpactAnalysisRequest(BaseModel):
     project_context: ProjectImpactContext = Field(
         description="Project context with changed files and related tests"
     )
+    git_diff: Optional[str] = Field(
+        default=None,
+        description="Optional git diff content for function-level impact analysis",
+    )
+    project_id: Optional[str] = Field(
+        default="default",
+        description="Project identifier for graph database queries",
+    )
 
 
 class ImpactAnalysisResponse(BaseModel):
@@ -253,7 +324,7 @@ class ImpactAnalysisResponse(BaseModel):
     impacted_tests: List[ImpactItem] = Field(
         description="List of test files that may be impacted by the changes"
     )
-    severity: Literal["high", "medium", "low", "none"] = Field(
+    severity: Literal["high", "medium", "low", "informational", "none"] = Field(
         default="none", description="Overall impact severity level"
     )
     suggested_action: Literal["run-all-tests", "run-affected-tests", "no-action"] = (
@@ -328,3 +399,115 @@ class QualityAnalysisResponse(BaseModel):
     )
     summary: QualitySummary = Field(description="Analysis summary statistics")
     issues: List[QualityIssue] = Field(description="List of detected quality issues")
+
+
+# ============================================================================
+# Neo4j Debug API Schemas
+# ============================================================================
+
+
+class SymbolNode(BaseModel):
+    """Symbol node in the code dependency graph."""
+
+    name: str = Field(description="Symbol name (e.g., 'calculate_total')")
+    qualified_name: str = Field(
+        description="Fully qualified name (e.g., 'module.ClassName.method_name')"
+    )
+    kind: Literal["function", "class", "method"] = Field(description="Type of symbol")
+    signature: Optional[str] = Field(
+        default=None,
+        description="Function/method signature with parameters",
+    )
+    file_path: str = Field(description="File path where symbol is defined")
+    line_start: int = Field(description="Starting line number", ge=1)
+    line_end: int = Field(description="Ending line number", ge=1)
+
+
+class CallRelationship(BaseModel):
+    """CALLS relationship between symbols."""
+
+    caller_qualified_name: str = Field(description="Qualified name of the caller")
+    callee_qualified_name: str = Field(description="Qualified name of the callee")
+    line: int = Field(description="Line number where call occurs", ge=1)
+
+
+class ImportRelationship(BaseModel):
+    """IMPORTS relationship between file and module."""
+
+    file_qualified_name: str = Field(description="Qualified name of the importing file")
+    module_qualified_name: str = Field(
+        description="Qualified name of the imported module"
+    )
+    module_name: str = Field(description="Module name (e.g., 'decimal')")
+    names: List[str] = Field(
+        description="List of imported names (e.g., ['Decimal', 'ROUND_UP'])"
+    )
+
+
+class IngestSymbolsRequest(BaseModel):
+    """Request payload for /debug/ingest-symbols endpoint."""
+
+    project_id: str = Field(
+        default="test-project",
+        description="Project identifier for multi-tenant support",
+    )
+    symbols: List[SymbolNode] = Field(description="List of symbol nodes to create")
+    calls: List[CallRelationship] = Field(
+        default=[],
+        description="List of CALLS relationships",
+    )
+    imports: List[ImportRelationship] = Field(
+        default=[],
+        description="List of IMPORTS relationships",
+    )
+
+
+class IngestSymbolsResponse(BaseModel):
+    """Response for /debug/ingest-symbols endpoint."""
+
+    nodes_created: int = Field(description="Number of nodes created/updated")
+    relationships_created: int = Field(description="Number of relationships created")
+    processing_time_ms: int = Field(description="Processing time in milliseconds")
+    project_id: str = Field(description="Project identifier used")
+
+
+class SymbolInfo(BaseModel):
+    """Symbol information in query results."""
+
+    name: str
+    qualified_name: str
+    kind: str
+    signature: Optional[str] = None
+    file_path: str
+    line_start: int
+    line_end: int
+
+
+class QueryFunctionResponse(BaseModel):
+    """Response for /debug/query-function endpoint."""
+
+    function: Optional[SymbolInfo] = Field(
+        default=None,
+        description="Queried function information (None if not found)",
+    )
+    dependencies: List[SymbolInfo] = Field(
+        default=[],
+        description="List of functions this function calls",
+    )
+    query_time_ms: int = Field(description="Query execution time in milliseconds")
+    project_id: str = Field(description="Project identifier used")
+
+
+class QueryCallersResponse(BaseModel):
+    """Response for /debug/query-callers endpoint (reverse dependencies)."""
+
+    function: Optional[SymbolInfo] = Field(
+        default=None,
+        description="Queried function information (None if not found)",
+    )
+    callers: List[SymbolInfo] = Field(
+        default=[],
+        description="List of functions that call this function",
+    )
+    query_time_ms: int = Field(description="Query execution time in milliseconds")
+    project_id: str = Field(description="Project identifier used")

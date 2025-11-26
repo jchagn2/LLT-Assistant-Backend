@@ -66,6 +66,40 @@ class Settings(BaseSettings):
         description="Redis connection URL for task management",
     )
 
+    # Neo4j Configuration
+    neo4j_uri: str = Field(
+        default="bolt://localhost:7687",
+        validation_alias="NEO4J_URI",
+        description="Neo4j connection URI",
+    )
+    neo4j_user: str = Field(
+        default="neo4j",
+        validation_alias="NEO4J_USER",
+        description="Neo4j username",
+    )
+    neo4j_password: str = Field(
+        default="neo4j123",
+        validation_alias="NEO4J_PASSWORD",
+        description="Neo4j password",
+    )
+    neo4j_database: str = Field(
+        default="neo4j",
+        validation_alias="NEO4J_DATABASE",
+        description="Neo4j database name",
+    )
+    neo4j_max_connection_lifetime: int = Field(
+        default=3600,
+        description="Max connection lifetime in seconds",
+    )
+    neo4j_max_connection_pool_size: int = Field(
+        default=50,
+        description="Max connection pool size",
+    )
+    neo4j_connection_acquisition_timeout: int = Field(
+        default=60,
+        description="Connection acquisition timeout in seconds",
+    )
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
