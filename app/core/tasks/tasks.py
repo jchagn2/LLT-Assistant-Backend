@@ -178,7 +178,12 @@ async def update_task_status(
     task["status"] = status.value
     task["updated_at"] = _now_iso()
     task["result"] = result
-    task["error"] = error
+
+    # Transform error string into TaskError-compatible dict
+    if error is not None:
+        task["error"] = {"message": str(error), "code": None, "details": None}
+    else:
+        task["error"] = None
 
     await _save_task(task_id, task)
     logger.debug(

@@ -238,3 +238,113 @@ class TestTaskStatusEndpoint:
         assert (
             "error" not in data
         ), "error field should be excluded for processing status"
+
+
+class TestAsyncTaskErrorHandling:
+    """Test suite for async task error handling (Feature 1).
+
+    These tests verify the fix for the "Crash-on-Error" bug where
+    the service would crash when polling for failed task status.
+    """
+
+    def test_failed_task_returns_structured_error_not_string(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        CRITICAL FIX: Verify failed tasks return structured error dict, not string.
+
+        This test ensures that when async tasks fail, the error is properly
+        stored as a structured dict matching TaskError schema, preventing
+        Pydantic ValidationError that would crash the service.
+
+        Regression test for: "Crash-on-Error" bug
+        """
+
+        async def fake_get_task(task_id: str) -> dict:  # type: ignore[override]
+            # Simulate what Redis now stores after the fix:
+            # Error is a dict matching TaskError schema
+            return {
+                "id": task_id,
+                "status": "failed",
+                "created_at": "2025-11-26T10:00:00Z",
+                "result": None,
+                "error": {
+                    "message": "Simulating a backend error for test",
+                    "code": None,
+                    "details": None,
+                },
+            }
+
+        monkeypatch.setattr(routes_module, "get_task", fake_get_task)
+
+        response = client.get("/tasks/123e4567-e89b-12d3-a456-426614174000")
+
+        # Service must NOT crash - always return 200
+        assert (
+            response.status_code == 200
+        ), "GET /tasks/{id} should not crash when task has structured error"
+
+        data = response.json()
+        assert data["task_id"] == "123e4567-e89b-12d3-a456-426614174000"
+        assert data["status"] == "failed"
+        assert data["created_at"] == "2025-11-26T10:00:00Z"
+
+        # Verify error is structured object, not string
+        assert "error" in data, "Response should contain 'error' field for failed tasks"
+        assert isinstance(
+            data["error"], dict
+        ), "Error should be a structured dict, not string (fix for crash bug)"
+        assert "message" in data["error"], "Error dict should contain 'message' field"
+        assert (
+            data["error"]["message"] == "Simulating a backend error for test"
+        ), "Error message should match stored value"
+        assert "code" in data["error"], "Error dict should contain 'code' field"
+        assert (
+            data["error"]["code"] is None
+        ), "Error code should be None for generic errors"
+        assert "details" in data["error"], "Error dict should contain 'details' field"
+
+        # Verify result field is not present (only error for failed tasks)
+        assert "result" not in data, "result field should be excluded for failed status"
+
+    def test_failed_task_handles_legacy_string_error_gracefully(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Verify backward compatibility: handle legacy string errors without crashing.
+
+        If old string errors exist in Redis from before the fix,
+        the route handler should gracefully convert them to TaskError objects.
+        """
+
+        async def fake_get_task(task_id: str) -> dict:  # type: ignore[override]
+            # Simulate legacy format: error stored as plain string
+            return {
+                "id": task_id,
+                "status": "failed",
+                "created_at": "2025-11-26T10:00:00Z",
+                "result": None,
+                "error": "Legacy string error message",  # Old format
+            }
+
+        monkeypatch.setattr(routes_module, "get_task", fake_get_task)
+
+        response = client.get("/tasks/123e4567-e89b-12d3-a456-426614174000")
+
+        # Should handle legacy format gracefully
+        assert (
+            response.status_code == 200
+        ), "Should handle legacy string errors without crashing"
+
+        data = response.json()
+        assert data["status"] == "failed"
+
+        # Verify error is converted to structured format
+        assert isinstance(
+            data["error"], dict
+        ), "Legacy string error should be converted to dict"
+        assert (
+            data["error"]["message"] == "Legacy string error message"
+        ), "Legacy error message should be preserved"
+        assert data["error"]["code"] is None
+        assert data["error"]["details"] is None

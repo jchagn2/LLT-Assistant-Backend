@@ -7,7 +7,7 @@ dependency injection and resource management.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from starlette.responses import Response as StarletteResponse
@@ -28,6 +28,7 @@ from app.api.v1.schemas import (
 from app.core.analysis.llm_analyzer import LLMAnalyzer
 from app.core.analyzer import ImpactAnalyzer, TestAnalyzer
 from app.core.constants import MAX_FILES_PER_REQUEST
+from app.core.graph.graph_service import GraphService
 from app.core.llm.llm_client import create_llm_client
 from app.core.services.quality_service import QualityAnalysisService
 from app.core.tasks.tasks import (
@@ -103,34 +104,77 @@ async def get_quality_service_context():
 
 
 @asynccontextmanager
-async def get_impact_analyzer_context():
+async def get_impact_analyzer_context(
+    project_id: str = "default",
+    use_graph: bool = True,
+):
     """
-    Async context manager for ImpactAnalyzer with proper resource cleanup.
+    Async context manager for ImpactAnalyzer with GraphService integration.
 
-    This ensures LLM clients are properly closed after use.
+    This context manager initializes the ImpactAnalyzer with a GraphService
+    for graph-based dependency analysis. If Neo4j is unavailable, the analyzer
+    will raise an appropriate error.
+
+    Args:
+        project_id: Project identifier for graph queries
+        use_graph: Whether to use graph-based analysis (default True)
 
     Yields:
-        ImpactAnalyzer instance
+        ImpactAnalyzer instance with GraphService
 
     Raises:
-        HTTPException: If analyzer initialization fails
+        HTTPException: If analyzer or graph service initialization fails
     """
+    graph_service = None
+
     try:
         rule_engine = RuleEngine()
         llm_client = create_llm_client()
         llm_analyzer = LLMAnalyzer(llm_client)
-        analyzer = ImpactAnalyzer(rule_engine, llm_analyzer)
+
+        if use_graph:
+            graph_service = GraphService()
+            try:
+                await graph_service.connect()
+                logger.debug("GraphService connected for impact analysis")
+            except Exception as e:
+                logger.error("Failed to connect to Neo4j: %s", e)
+                raise HTTPException(
+                    status_code=503,
+                    detail="Graph database unavailable for impact analysis",
+                )
+
+        analyzer = ImpactAnalyzer(
+            rule_engine,
+            llm_analyzer,
+            graph_service=graph_service,
+            project_id=project_id,
+        )
 
         try:
             yield analyzer
         finally:
-            await analyzer.close()
+            # Close LLM analyzer
+            if hasattr(analyzer, "llm_analyzer") and hasattr(
+                analyzer.llm_analyzer, "close"
+            ):
+                await analyzer.llm_analyzer.close()
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to initialize impact analyzer: {e}")
+        logger.error("Failed to initialize impact analyzer: %s", e)
         raise HTTPException(
             status_code=503, detail=f"Failed to initialize impact analyzer: {str(e)}"
         )
+    finally:
+        # Always close graph service if it was created
+        if graph_service is not None:
+            try:
+                await graph_service.close()
+                logger.debug("GraphService closed")
+            except Exception as e:
+                logger.warning("Error closing graph service: %s", e)
 
 
 # Backward compatibility functions for dependency injection (used by tests)
@@ -148,11 +192,12 @@ def get_impact_analyzer() -> ImpactAnalyzer:
     Deprecated: Use get_impact_analyzer_context() instead.
 
     Kept for backward compatibility with existing tests.
+    Note: Returns analyzer without GraphService (heuristic-only mode).
     """
     rule_engine = RuleEngine()
     llm_client = create_llm_client()
     llm_analyzer = LLMAnalyzer(llm_client)
-    return ImpactAnalyzer(rule_engine, llm_analyzer)
+    return ImpactAnalyzer(rule_engine, llm_analyzer, graph_service=None)
 
 
 @router.post(
@@ -280,10 +325,18 @@ async def get_task_status(task_id: str) -> TaskStatusResponse | StarletteRespons
     # Convert task data to TaskStatusResponse
     error = None
     if task_data.get("error"):
-        error = TaskError(
-            message=task_data["error"],
-            code=None,  # Can be enhanced with specific error codes
-        )
+        error_data = task_data["error"]
+        # Handle both dict (new format) and string (legacy format)
+        if isinstance(error_data, dict):
+            # Extract fields explicitly to avoid issues with polluted data
+            error = TaskError(
+                message=error_data.get("message", "Unknown error"),
+                code=error_data.get("code"),
+                details=error_data.get("details"),
+            )
+        else:
+            # Legacy string format fallback
+            error = TaskError(message=str(error_data), code=None, details=None)
 
     logger.info(
         "Returning task status: task_id=%s, status=%s, has_result=%s, has_error=%s",
@@ -375,10 +428,12 @@ async def analyze_impact(
     request: ImpactAnalysisRequest,
 ) -> ImpactAnalysisResponse:
     """
-    Analyze the impact of file changes on test files.
+    Analyze the impact of file changes on test files using graph-based analysis.
 
-    This endpoint accepts project context (changed files and related tests)
-    and returns which tests may be impacted by the changes with severity assessment.
+    This endpoint uses the Neo4j graph database to find reverse dependencies
+    (functions that call the modified functions) for accurate impact assessment.
+    When git_diff is provided, the analysis extracts modified function names
+    and queries the dependency graph.
 
     Args:
         request: Impact analysis request containing project context
@@ -387,7 +442,9 @@ async def analyze_impact(
         Impact analysis response with impacted tests and suggested actions
 
     Raises:
-        HTTPException: If analysis fails or request is invalid
+        HTTPException: 400 if request is invalid
+        HTTPException: 503 if graph database is unavailable
+        HTTPException: 500 if analysis fails due to internal error
     """
     try:
         # Validate request
@@ -395,9 +452,10 @@ async def analyze_impact(
             raise HTTPException(status_code=400, detail="files_changed cannot be empty")
 
         logger.info(
-            "Starting impact analysis: %d changed files, %d related tests",
+            "Starting impact analysis (graph-based): %d changed files, %d related tests, project=%s",
             len(request.project_context.files_changed),
             len(request.project_context.related_tests),
+            request.project_id,
         )
         logger.debug(
             "Changed files: %s",
@@ -411,9 +469,16 @@ async def analyze_impact(
         ]
         related_tests = request.project_context.related_tests
 
-        # Use context manager for proper resource management
-        async with get_impact_analyzer_context() as impact_analyzer:
-            result = impact_analyzer.analyze_impact(files_changed, related_tests)
+        # Use context manager for proper resource management with GraphService
+        async with get_impact_analyzer_context(
+            project_id=request.project_id,
+            use_graph=True,
+        ) as impact_analyzer:
+            result = await impact_analyzer.analyze_impact_async(
+                files_changed,
+                related_tests,
+                git_diff=request.git_diff,
+            )
 
         logger.info(
             "Impact analysis completed: %d impacted tests found",
@@ -426,10 +491,17 @@ async def analyze_impact(
         # Re-raise HTTP exceptions as-is
         raise
     except ValueError as e:
-        logger.error(f"Validation error: {e}")
+        logger.error("Validation error: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        # Handle graph service errors
+        logger.error("Runtime error in impact analysis: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=str(e),
+        )
     except Exception as e:
-        logger.error(f"Impact analysis failed: {e}", exc_info=True)
+        logger.error("Impact analysis failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500, detail="Impact analysis failed due to internal error"
         )
