@@ -109,8 +109,59 @@ The backend is feature-complete and ready for production use. The system can:
 ### Prerequisites
 
 - Python 3.11+
-- UV package manager
+- UV package manager (for standard build)
 - Docker and Docker Compose (for containerized deployment)
+- Nix (optional, for experimental reproducible builds)
+
+## Build Options
+
+The project supports two build systems:
+
+### Standard Build (Production)
+
+**Using UV + pip:**
+```bash
+# Install dependencies
+uv pip install -e .
+
+# Run development server
+uvicorn app.main:app --reload
+```
+
+### Nix Build (Experimental)
+
+**Prerequisites:**
+```bash
+# Install Nix
+sh <(curl -L https://nixos.org/nix/install) --daemon
+```
+
+**Build application:**
+```bash
+# Build Python application
+nix build .
+
+# Run application
+./result/bin/uvicorn app.main:app --host 0.0.0.0 --port 8886
+```
+
+**Build Docker image:**
+```bash
+# Build Docker image with Nix
+nix build .#dockerImage
+
+# Load and run
+docker load < result
+docker run -p 8886:8886 llt-api:latest
+```
+
+**Development shell:**
+```bash
+# Enter development environment with all dependencies
+nix develop
+```
+
+> **Note:** Nix build is experimental (POC phase). For production use, stick with the standard UV-based build.
 
 ### Local Development
 

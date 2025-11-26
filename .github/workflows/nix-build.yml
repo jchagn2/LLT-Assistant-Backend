@@ -1,0 +1,234 @@
+name: Nix Build and Test
+
+on:
+  push:
+    branches:
+      - dev
+
+# Optimized CI/CD pipeline with job dependencies and caching
+# Architecture: check → build → docker → test (sequential with caching)
+jobs:
+  # Phase 1: Validate flake syntax and dependencies
+  nix-check:
+    name: Nix Flake Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: llt-assistant-backend
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Check flake
+        run: |
+          nix flake check --show-trace
+          echo "✅ Flake check passed"
+
+      - name: Show flake metadata
+        run: |
+          nix flake metadata
+          echo "✅ Flake metadata displayed"
+
+  # Phase 2: Build Python application (only if check passes)
+  nix-build:
+    name: Build Python Application
+    runs-on: ubuntu-latest
+    needs: nix-check
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          # Remove unnecessary files to free up disk space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: llt-assistant-backend
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Build Python application
+        run: |
+          nix build . --show-trace
+          echo "✅ Nix build completed successfully"
+
+      - name: Verify application
+        run: |
+          ./result/bin/python --version
+          echo "✅ Python application verified"
+
+      - name: Upload application artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-app
+          path: result
+          retention-days: 1
+
+  # Phase 3: Build Docker image (only if build passes)
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: nix-build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: llt-assistant-backend
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Build Docker image
+        run: |
+          nix build .#dockerImage --show-trace
+          echo "✅ Docker image build completed"
+
+      - name: Save Docker image to tarball
+        run: |
+          # Copy result to a named file for artifact upload
+          cp result docker-image.tar.gz
+          echo "✅ Docker image saved"
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: docker-image.tar.gz
+          retention-days: 1
+
+  # Phase 4: Integration tests (only if Docker build passes)
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load < docker-image.tar.gz
+          echo "✅ Docker image loaded"
+
+      - name: List Docker images
+        run: |
+          docker images | grep llt-api
+          echo "✅ Docker image found"
+
+      - name: Start services for testing
+        run: |
+          # Start Redis and Neo4j for integration testing
+          docker network create llt-network || true
+
+          docker run -d --name redis --network llt-network \
+            -p 6379:6379 redis:7-alpine
+
+          docker run -d --name neo4j --network llt-network \
+            -p 7474:7474 -p 7687:7687 \
+            -e NEO4J_AUTH=neo4j/neo4j123 \
+            neo4j:5.13
+
+          # Wait for services to be ready
+          echo "Waiting for Redis..."
+          timeout 30 bash -c 'until docker exec redis redis-cli ping; do sleep 1; done'
+
+          echo "Waiting for Neo4j..."
+          timeout 60 bash -c 'until docker exec neo4j cypher-shell -u neo4j -p neo4j123 "RETURN 1" 2>/dev/null; do sleep 2; done'
+
+          echo "✅ Services started successfully"
+
+      - name: Run Docker container
+        run: |
+          docker run -d --name llt-api --network llt-network \
+            -p 8886:8886 \
+            -e REDIS_HOST=redis \
+            -e REDIS_PORT=6379 \
+            -e NEO4J_URI=bolt://neo4j:7687 \
+            -e NEO4J_USER=neo4j \
+            -e NEO4J_PASSWORD=neo4j123 \
+            -e NEO4J_DATABASE=neo4j \
+            llt-api:latest
+
+          # Wait for API to be ready
+          echo "Waiting for API to start..."
+          timeout 60 bash -c 'until curl -s http://localhost:8886/health > /dev/null; do sleep 2; done'
+
+          echo "✅ Container started successfully"
+
+      - name: Check container logs
+        if: always()
+        run: |
+          echo "=== LLT API Logs ==="
+          docker logs llt-api || true
+
+      - name: Smoke test - Health endpoint
+        run: |
+          # Test health endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8886/health)
+
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Health check passed (HTTP $response)"
+          else
+            echo "❌ Health check failed (HTTP $response)"
+            docker logs llt-api
+            exit 1
+          fi
+
+      - name: Smoke test - API documentation
+        run: |
+          # Test OpenAPI docs endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8886/docs)
+
+          if [ "$response" -eq 200 ]; then
+            echo "✅ API docs accessible (HTTP $response)"
+          else
+            echo "❌ API docs not accessible (HTTP $response)"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop llt-api neo4j redis || true
+          docker rm llt-api neo4j redis || true
+          docker network rm llt-network || true
