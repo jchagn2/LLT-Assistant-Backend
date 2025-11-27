@@ -79,6 +79,10 @@
           pythonImportsCheck = [ "app" ];
         });
 
+        # Create a complete Python environment with app and all dependencies
+        # This environment includes bin/uvicorn and other executables
+        pythonEnv = python.withPackages (ps: [ app ]);
+
       in
       {
         packages = {
@@ -90,13 +94,13 @@
             tag = "latest";
 
             contents = [
-              app
+              pythonEnv
               pkgs.coreutils
               pkgs.bash
             ];
 
             config = {
-              Cmd = [ "${app}/bin/uvicorn" "app.main:app" "--host" "0.0.0.0" "--port" "8886" ];
+              Cmd = [ "${pythonEnv}/bin/uvicorn" "app.main:app" "--host" "0.0.0.0" "--port" "8886" ];
               ExposedPorts = {
                 "8886/tcp" = { };
               };
