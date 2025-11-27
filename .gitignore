@@ -254,6 +254,8 @@ docker-compose.override.yml
 
 # Debug files
 debug_*.py
+# Exception: API debug routes should be tracked
+!app/api/v1/debug_routes.py
 
 # Test artifacts
 test_results/
