@@ -102,27 +102,44 @@ class QualityAnalysisService:
             # Step 1: Fetch dependency data from graph if available
             dependency_data = {}
             if self.graph_service and self.project_id:
-                logger.debug("Fetching dependency data from graph database")
+                logger.info("Step 1/4: Fetching dependency data from graph database")
                 dependency_data = await self._fetch_dependency_data(files)
-                logger.debug(
-                    "Fetched dependencies for %d test functions", len(dependency_data)
+                logger.info(
+                    "Step 1/4 complete: Fetched dependencies for %d test functions",
+                    len(dependency_data),
+                )
+            else:
+                logger.info(
+                    "Step 1/4: Skipping graph dependency fetch (not configured)"
                 )
 
             # Step 2: Inject dependency data into rule engine
             if dependency_data:
+                logger.info("Step 2/4: Injecting dependency data into rule engine")
                 self._inject_dependency_data(dependency_data)
+                logger.debug("Step 2/4 complete: Dependency data injected")
+            else:
+                logger.info("Step 2/4: Skipping dependency injection (no data)")
 
             # Step 3: Convert mode to TestAnalyzer format
+            logger.debug("Step 3/4: Converting analysis mode")
             analyzer_mode = self._convert_mode(mode)
-            logger.debug("Converted mode: %s -> %s", mode, analyzer_mode)
+            logger.debug(
+                "Step 3/4 complete: Converted mode %s -> %s", mode, analyzer_mode
+            )
 
-            # Step 4: Perform analysis using existing TestAnalyzer
-            logger.debug("Calling TestAnalyzer.analyze_files")
+            # Step 4: Perform analysis using TestAnalyzer
+            logger.info(
+                "Step 4/4: Starting core analysis with TestAnalyzer (mode=%s, files=%d)",
+                analyzer_mode,
+                len(files),
+            )
             analysis_result = await self.test_analyzer.analyze_files(
                 files=files, mode=analyzer_mode
             )
-            logger.debug(
-                "TestAnalyzer returned %d raw issues", len(analysis_result.issues)
+            logger.info(
+                "Step 4/4 complete: TestAnalyzer returned %d raw issues",
+                len(analysis_result.issues),
             )
 
             # Step 5: Convert results to Quality Analysis format
