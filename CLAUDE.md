@@ -306,5 +306,483 @@ Before committing code, verify:
 
 ---
 
-**Last Updated:** 2025-11-16
-**Version:** 1.0
+**Last Updated:** 2025-11-25
+**Version:** 1.1
+
+---
+
+## 11. Neo4j Graph Database Integration (Phase 0)
+
+### 11.1 Overview
+
+The project now includes Neo4j 5.13+ for storing and querying code dependency graphs. This is currently in **Phase 0** (validation/debugging phase) to test Neo4j's suitability for code structure analysis.
+
+### 11.2 Architecture
+
+**Layered Design:**
+```
+API Layer:       app/api/v1/debug_routes.py (debug endpoints)
+                 ↓
+Service Layer:   app/core/graph/graph_service.py (business logic)
+                 ↓
+Client Layer:    app/core/graph/neo4j_client.py (connection pooling)
+                 ↓
+Database:        Neo4j 5.13+ (Docker container)
+```
+
+### 11.3 File Structure
+
+```
+app/core/graph/
+├── __init__.py              # Module exports
+├── neo4j_client.py         # Async Neo4j driver wrapper with connection pooling
+└── graph_service.py        # High-level graph operations (ingest, query)
+
+app/api/v1/
+├── debug_routes.py         # Debug API endpoints (/debug/*)
+└── schemas.py              # Pydantic models for Neo4j API (added at end)
+
+tests/
+├── unit/core/graph/
+│   └── test_neo4j_client.py   # Unit tests for Neo4j client
+├── unit/test_debug_api.py      # Unit tests for debug API
+└── integration/
+    └── test_neo4j_integration.py  # Integration tests (requires Neo4j)
+```
+
+### 11.4 Data Model
+
+**Node: Symbol**
+- Properties: `name`, `qualified_name`, `kind`, `signature`, `file_path`, `line_start`, `line_end`, `project_id`
+- `qualified_name` has unique constraint (e.g., "module.ClassName.method_name")
+- `kind` can be: "function", "class", "method"
+
+**Relationship: CALLS**
+- `(caller:Symbol)-[:CALLS {line: N}]->(callee:Symbol)`
+- Represents function call dependencies
+
+**Relationship: IMPORTS**
+- `(file:Symbol)-[:IMPORTS {names: [...]}]->(module:Symbol)`
+- Represents import statements
+
+### 11.5 Debug API Endpoints
+
+**POST /debug/ingest-symbols**
+- Accepts code symbols and relationships from frontend
+- Uses MERGE to avoid duplicates
+- Transaction support for atomicity
+- Returns: `nodes_created`, `relationships_created`, `processing_time_ms`
+
+**GET /debug/query-function/{function_name}?project_id=...&depth=1**
+- Query function and its dependencies (1-3 levels)
+- Returns: function info, dependencies list, `query_time_ms`
+- Returns 404 if function not found
+
+**GET /debug/health/neo4j**
+- Health check for Neo4j connectivity
+- Returns 200 if healthy, 503 if unavailable
+
+### 11.6 Performance Targets
+
+- **Batch Insert**: 100 nodes + 200 relationships < 2 seconds
+- **Query Latency**: < 100ms for single function query
+- **Memory Usage**: < 500MB for typical workload
+
+### 11.7 Configuration
+
+**Environment Variables:**
+```env
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=neo4j123
+NEO4J_DATABASE=neo4j
+```
+
+**Settings in app/config.py:**
+- `neo4j_uri`, `neo4j_user`, `neo4j_password`, `neo4j_database`
+- `neo4j_max_connection_lifetime`, `neo4j_max_connection_pool_size`
+- `neo4j_connection_acquisition_timeout`
+
+### 11.8 Usage Example
+
+**Ingest Symbols:**
+```bash
+curl -X POST http://localhost:8886/debug/ingest-symbols \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "test-project",
+    "symbols": [
+      {
+        "name": "calculate_tax",
+        "qualified_name": "module.calculate_tax",
+        "kind": "function",
+        "signature": "(price: float) -> float",
+        "file_path": "/app/utils.py",
+        "line_start": 10,
+        "line_end": 20
+      }
+    ],
+    "calls": [],
+    "imports": []
+  }'
+```
+
+**Query Function:**
+```bash
+curl "http://localhost:8886/debug/query-function/calculate_tax?project_id=test-project"
+```
+
+### 11.9 Testing
+
+**Unit Tests:**
+```bash
+pytest tests/unit/core/graph/ tests/unit/test_debug_api.py
+```
+
+**Integration Tests (requires running Neo4j):**
+```bash
+docker-compose up -d neo4j
+pytest tests/integration/test_neo4j_integration.py -m integration
+```
+
+### 11.10 Key Implementation Details
+
+**Async Transactions:**
+```python
+# Correct pattern for Neo4j async transactions
+async with self.client.session() as session:
+    tx = await session.begin_transaction()
+    try:
+        # Execute queries
+        await tx.run(query, params)
+        await tx.commit()
+    except Exception:
+        await tx.rollback()
+        raise
+```
+
+**Context Manager for Resource Cleanup:**
+```python
+@asynccontextmanager
+async def get_graph_service_context():
+    service = GraphService()
+    try:
+        await service.connect()
+        yield service
+    finally:
+        await service.close()
+```
+
+### 11.11 Indexing Strategy
+
+**Automatically created on startup:**
+1. Unique constraint on `Symbol.qualified_name` (prevents duplicates)
+2. Index on `Symbol.name` (fast function lookup)
+3. Index on `Symbol.project_id` (multi-tenant queries)
+
+**Verify indexes in Neo4j Browser:**
+```cypher
+:schema
+```
+
+### 11.12 Common Pitfalls to Avoid
+
+1. **Transaction Management**: Always await `session.begin_transaction()`
+2. **Context Managers**: Don't wrap exceptions in async context managers
+3. **MERGE vs CREATE**: Use MERGE to avoid duplicate nodes
+4. **Qualified Names**: Ensure uniqueness across the codebase
+5. **Project Isolation**: Always include `project_id` in queries
+
+### 11.13 Future Enhancements (Post-Phase 0)
+
+- Integrate with Feature 3 (Impact Analysis)
+- Add more relationship types (INHERITS, IMPLEMENTS)
+- Graph visualization endpoints
+- Historical analysis and metrics tracking
+
+---
+
+For detailed Neo4j documentation, see `docs/context/neo4j-integration.md`
+
+---
+
+## 12. Task Tracking - Trunk-First Verification Strategy
+
+This section tracks the implementation progress of the Trunk-First Verification strategy for Neo4j graph database integration and feature enhancements.
+
+### 12.1 Phase 1: Trunk Validation (COMPLETED ✅)
+
+Validates the Neo4j graph database foundation before enhancing business features.
+
+#### Task 1.1: Test Project & Data Fixtures
+- **1.1.1** ✅ Design test project structure (3 Python files with known call relationships)
+- **1.1.2** ✅ Write test data ingestion fixture in `tests/fixtures/minimal_project/`
+- **1.1.3** ✅ Write E2E test for data ingestion (verify node and relationship counts)
+
+#### Task 1.2: Query Function Tests
+- **1.2.1** ✅ Write E2E tests for forward dependencies
+- **1.2.2** ✅ Write E2E tests for reverse dependencies
+- **1.2.3** ✅ Add debug endpoint for reverse dependencies
+- **1.2.4** ✅ Performance validation (< 100ms queries)
+
+**Status:** All 7 tasks completed. Neo4j trunk validated with 15 passing integration tests.
+
+---
+
+### 12.2 Phase 2.1: Feature 3 Enhancement - Impact Analysis (COMPLETED ✅)
+
+Replace heuristic-based impact analysis with graph-based dependency analysis.
+
+#### Task 2.1: Graph-Based Impact Analysis
+- **2.1.1** ✅ Create diff parser utility + unit tests
+- **2.1.2** ✅ Add GraphService to ImpactAnalyzer
+- **2.1.3** ✅ Update ImpactAnalyzer context manager
+- **2.1.4** ✅ Implement graph-based impact calculation
+- **2.1.5** ✅ Write E2E tests for graph-based impact analysis
+- **2.1.6** ✅ Update API error handling (503 for Neo4j unavailable)
+
+**Status:** All 6 tasks completed. Graph-based impact analysis fully functional with 18 E2E tests passing.
+
+---
+
+### 12.3 Phase 2.2: Feature 4 Enhancement - Quality Analysis (COMPLETED ✅)
+
+Add graph-based mock detection to quality analysis.
+
+#### Task 2.2: Mock Detection Integration
+- **2.2.1** ✅ Design mock detection algorithm and implement MissingMockRule
+- **2.2.2** ✅ Add graph query to QualityAnalysisService
+- **2.2.3** ✅ Create MISSING_MOCK issue type in constants
+- **2.2.4** ✅ Write E2E tests for quality analysis with graph
+
+**Status:** All 4 tasks completed. Graph-based mock detection fully functional with 3 E2E tests passing.
+
+---
+
+### 12.4 Additional Tasks Completed
+
+#### Context Management Enhancement
+- ✅ Add GET `/context/projects/{project_id}` endpoint for graceful recovery
+  - Added OpenAPI specification
+  - Implemented `ProjectDataResponse` schema
+  - Created `get_project_data()` method in GraphService
+  - Added route handler with proper error handling
+  - Added comprehensive unit tests
+
+---
+
+### 12.5 Current Task Status Summary
+
+**Completed:** 17 tasks
+**In Progress:** 0 tasks
+**Pending:** 0 tasks
+
+**All trunk validation tasks have been completed successfully!**
+
+Phase 1 (Trunk Validation): ✅ 7/7 tasks complete
+Phase 2.1 (Feature 3 Enhancement): ✅ 6/6 tasks complete
+Phase 2.2 (Feature 4 Enhancement): ✅ 4/4 tasks complete
+
+**Next Steps:**
+- Phase 3: Consider additional graph-based enhancements
+- Monitor graph database performance in production
+- Expand test coverage for edge cases
+
+---
+
+**Last Updated:** 2025-11-26
+**Version:** 1.4
+
+---
+
+## 12. Docker Development Workflow
+
+### 12.1 Code Change Deployment
+
+**CRITICAL:** When modifying backend API code, you MUST rebuild Docker images and restart containers for changes to take effect.
+
+**Workflow:**
+```bash
+# After making code changes
+docker-compose build backend
+docker-compose up -d
+
+# Verify changes took effect
+docker logs llt-assistant-backend-backend-1 --tail 50
+```
+
+**Common Mistake:** Editing code without rebuilding Docker images. Changes will NOT be reflected in running containers until you rebuild and restart.
+
+### 12.2 Development Best Practices
+
+1. **Always rebuild after code changes:** Any modification to Python files in `app/` directory requires image rebuild
+2. **Check container logs:** Use `docker logs` to verify the new code is running
+3. **Restart services individually:** Use `docker-compose restart backend` for faster restarts without full rebuild (only works if dependencies haven't changed)
+4. **Clean rebuild:** If issues persist, use `docker-compose build --no-cache backend` for a clean rebuild
+
+### 12.3 Common Development Commands
+
+```bash
+# View running containers
+docker ps
+
+# View container logs (real-time)
+docker logs -f llt-assistant-backend-backend-1
+
+# Restart specific service
+docker-compose restart backend
+
+# Stop all services
+docker-compose down
+
+# Rebuild and restart
+docker-compose build backend && docker-compose up -d
+
+# Clean rebuild (no cache)
+docker-compose build --no-cache backend
+```
+
+---
+
+## 13. Nix Build System (Experimental)
+
+### 13.1 Overview
+
+The project supports two build systems:
+- **Primary:** uv + hatchling (production use)
+- **Experimental:** Nix + pyproject.nix (POC for reproducible builds)
+
+This dual-system approach allows gradual evaluation of Nix without disrupting the existing workflow. Unlike poetry2nix, pyproject.nix natively supports PEP 621 `[project]` format and works with hatchling build backend.
+
+### 13.2 Building with Nix
+
+**Prerequisites:**
+```bash
+# Install Nix (if not already installed)
+sh <(curl -L https://nixos.org/nix/install) --daemon
+
+# Enable experimental features
+export NIX_CONFIG="experimental-features = nix-command flakes"
+```
+
+**Build Commands:**
+```bash
+# Build Python application
+nix build .
+
+# Verify build output
+./result/bin/python --version
+
+# Build Docker image
+nix build .#dockerImage
+
+# Load Docker image
+docker load < result
+```
+
+### 13.3 Development Shell
+
+Enter a Nix development shell with all dependencies:
+
+```bash
+nix develop
+
+# Inside the shell, you have access to:
+# - uv
+# - python3.11
+# - All project dependencies
+```
+
+### 13.4 CI/CD Workflows
+
+The project runs two parallel CI workflows:
+
+1. **Traditional workflow** (`.github/workflows/tests.yml`)
+   - Uses uv + hatchling
+   - Primary production pipeline
+
+2. **Nix workflow** (`.github/workflows/nix-build.yml`)
+   - Uses Nix + pyproject.nix
+   - Experimental validation
+   - Triggers on:
+     - Push to `dev` branch
+     - Push to `feat/**` branches
+     - Pull requests to `dev` branch
+
+Both workflows run independently and must pass for production deployments.
+
+### 13.5 File Structure
+
+**New files added for Nix:**
+- `flake.nix` - Nix flake definition using pyproject.nix
+- `flake.lock` - Nix dependency lock file
+- `.gitattributes` - Marks lock files as linguist-generated
+- `.github/workflows/nix-build.yml` - Nix CI workflow
+
+**Unchanged files:**
+- `pyproject.toml` - Uses hatchling build-system (PEP 621 format)
+- `uv.lock` - Primary dependency lock file
+- `Dockerfile` - Traditional Docker build
+- `.github/workflows/tests.yml` - Primary CI workflow
+- All application code in `app/`
+
+**Note:** Unlike poetry2nix, pyproject.nix reads dependencies directly from `pyproject.toml`, so no `poetry.lock` file is needed.
+
+### 13.6 Dependency Management
+
+Nix builds use dependencies defined in `pyproject.toml`. When adding new dependencies:
+
+1. Update `pyproject.toml`
+2. Regenerate uv lock: `uv lock`
+3. Update Nix flake inputs: `nix flake lock --update-input nixpkgs`
+
+The Nix build will automatically read dependencies from `pyproject.toml` - no separate lock file needed.
+
+### 13.7 Troubleshooting
+
+**Issue: "nix: command not found"**
+```bash
+# Source nix daemon
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+```
+
+**Issue: Nix build fails**
+```bash
+# Show detailed build log
+nix build . --show-trace
+
+# Check flake syntax
+nix flake check
+```
+
+**Issue: Docker image build fails on macOS**
+This is expected behavior. Docker images are Linux-specific. Use GitHub Actions (Linux runner) for full validation. On macOS, only validate `nix build .` (the Python app).
+
+### 13.8 Performance Comparison (TODO)
+
+After POC validation, compare:
+- CI build times: uv vs Nix
+- Docker image sizes
+- Rebuild times with caching
+- Developer experience
+
+### 13.9 Migration Path
+
+**If Nix POC succeeds:**
+1. Enable cachix for faster CI builds
+2. Gradually migrate production builds to Nix
+3. Update documentation and team training
+4. Eventually deprecate uv-based workflow
+
+**If Nix POC fails:**
+1. Archive feat/nix-poc branch
+2. Remove Nix-specific files
+3. Continue with uv + hatchling
+4. Document lessons learned
+
+**Rollback is simple:** Delete Nix files and branch. Zero impact on existing build system.
+
+---
+
+**Last Updated:** 2025-11-26
+**Version:** 1.5

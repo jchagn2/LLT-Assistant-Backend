@@ -109,8 +109,59 @@ The backend is feature-complete and ready for production use. The system can:
 ### Prerequisites
 
 - Python 3.11+
-- UV package manager
+- UV package manager (for standard build)
 - Docker and Docker Compose (for containerized deployment)
+- Nix (optional, for experimental reproducible builds)
+
+## Build Options
+
+The project supports two build systems:
+
+### Standard Build (Production)
+
+**Using UV + pip:**
+```bash
+# Install dependencies
+uv pip install -e .
+
+# Run development server
+uvicorn app.main:app --reload
+```
+
+### Nix Build (Experimental)
+
+**Prerequisites:**
+```bash
+# Install Nix
+sh <(curl -L https://nixos.org/nix/install) --daemon
+```
+
+**Build application:**
+```bash
+# Build Python application
+nix build .
+
+# Run application
+./result/bin/uvicorn app.main:app --host 0.0.0.0 --port 8886
+```
+
+**Build Docker image:**
+```bash
+# Build Docker image with Nix
+nix build .#dockerImage
+
+# Load and run
+docker load < result
+docker run -p 8886:8886 llt-api:latest
+```
+
+**Development shell:**
+```bash
+# Enter development environment with all dependencies
+nix develop
+```
+
+> **Note:** Nix build is experimental (POC phase). For production use, stick with the standard UV-based build.
 
 ### Local Development
 
@@ -284,12 +335,50 @@ llt-backend/
 # Install dev dependencies
 uv pip install -e ".[dev]"
 
-# Run tests
-pytest tests/
+# Run all unit tests
+pytest tests/unit/
 
-# Run with coverage
-pytest tests/ --cov=app --cov-report=html
+# Run unit tests with coverage
+pytest tests/unit/ --cov=app --cov-report=html
 ```
+
+#### Integration Tests
+
+Integration tests require Neo4j to be running. These tests verify the complete request flow through the main FastAPI application with real database connections.
+
+**Prerequisites:**
+- Neo4j must be running (use Docker Compose)
+
+**Running Integration Tests:**
+
+```bash
+# Start Neo4j
+docker-compose up -d neo4j
+
+# Verify Neo4j is running
+nc -zv localhost 7687
+
+# Run integration tests (when running locally, must use localhost URI)
+NEO4J_URI=bolt://localhost:7687 \
+NEO4J_USER=neo4j \
+NEO4J_PASSWORD=neo4j123 \
+NEO4J_DATABASE=neo4j \
+uv run pytest tests/integration/ -v -m integration --no-cov
+
+# Or run specific integration test file
+NEO4J_URI=bolt://localhost:7687 \
+NEO4J_USER=neo4j \
+NEO4J_PASSWORD=neo4j123 \
+NEO4J_DATABASE=neo4j \
+uv run pytest tests/integration/test_full_flow.py -v -m integration
+```
+
+**Important Notes:**
+- When running tests **locally** (outside Docker), use `NEO4J_URI=bolt://localhost:7687`
+- When running tests **inside Docker**, use `NEO4J_URI=bolt://neo4j:7687` (default in .env)
+- Integration tests are marked with `@pytest.mark.integration`
+- Each test creates unique project IDs to avoid conflicts
+- Cleanup fixtures automatically remove test data after each test
 
 ### Code Quality
 
@@ -329,6 +418,124 @@ pytest
 1. **Test Mergeability**: Identifies tests that could be logically merged
 2. **Assertion Quality**: Evaluates if assertions are sufficient and meaningful
 3. **Test Smells**: Detects code smells like timing dependencies, over-mocking, etc.
+
+## Neo4j Graph Database Integration
+
+The application includes Neo4j graph database for storing and querying code dependency graphs. This is currently in Phase 0 (validation/debugging) and provides debug endpoints for testing.
+
+### Architecture
+
+- **Neo4j 5.13+** running in Docker container
+- **Graph Service Layer** (`app/core/graph/graph_service.py`) for business logic
+- **Neo4j Client** (`app/core/graph/neo4j_client.py`) with async connection pooling
+- **Debug API** endpoints for testing and validation
+
+### Data Model
+
+**Nodes:**
+- `Symbol`: Represents functions, classes, and methods
+  - Properties: name, qualified_name, kind, signature, file_path, line_start, line_end, project_id
+
+**Relationships:**
+- `CALLS`: Function A calls Function B
+- `IMPORTS`: File imports Module
+
+### Debug API Endpoints
+
+**POST /debug/ingest-symbols**
+
+Ingest symbol information into graph database.
+
+Request body:
+```json
+{
+  "project_id": "test-project",
+  "symbols": [
+    {
+      "name": "calculate_total",
+      "qualified_name": "app.utils.calculate_total",
+      "kind": "function",
+      "signature": "calculate_total(items: List[Item]) -> Decimal",
+      "file_path": "/app/utils.py",
+      "line_start": 45,
+      "line_end": 60
+    }
+  ],
+  "calls": [
+    {
+      "caller_qualified_name": "app.service.process_order",
+      "callee_qualified_name": "app.utils.calculate_total",
+      "line": 123
+    }
+  ],
+  "imports": []
+}
+```
+
+**GET /debug/query-function/{function_name}**
+
+Query function and its dependencies.
+
+```bash
+GET /debug/query-function/calculate_total?project_id=test-project&depth=1
+```
+
+Response includes:
+- Function information
+- Direct dependencies (depth=1) or transitive (depth=2-3)
+- Query execution time (target: < 100ms)
+
+**GET /debug/health/neo4j**
+
+Health check endpoint for Neo4j connection.
+
+### Performance Metrics
+
+- **Batch Insert**: 100 nodes + 200 relationships < 2s
+- **Query Latency**: Single function query < 100ms
+- **Memory Usage**: < 500MB for typical workload
+
+### Running with Neo4j
+
+```bash
+# Start all services (Redis, Neo4j, API)
+docker-compose up -d
+
+# Access Neo4j Browser
+open http://localhost:7474
+
+# Run integration tests (requires Neo4j running)
+pytest tests/integration/test_neo4j_integration.py -m integration
+```
+
+### Environment Variables
+
+Add to your `.env` file:
+
+```env
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=neo4j123
+NEO4J_DATABASE=neo4j
+```
+
+### Neo4j Browser Access
+
+1. Open http://localhost:7474 in your browser
+2. Login with configured credentials (default: neo4j/neo4j123)
+3. Run Cypher queries to explore the graph:
+
+```cypher
+// View all symbols
+MATCH (s:Symbol) RETURN s LIMIT 25
+
+// View function dependencies
+MATCH (f:Symbol {name: 'calculate_total'})-[:CALLS]->(dep:Symbol)
+RETURN f, dep
+
+// View indexes
+:schema
+```
 
 ## Deployment
 

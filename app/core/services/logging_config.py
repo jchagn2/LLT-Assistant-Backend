@@ -21,7 +21,7 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
 
-        # Add extra fields if present
+        # Add extra fields if present (Phase 0 fields)
         if hasattr(record, "correlation_id"):
             log_entry["correlation_id"] = record.correlation_id
 
@@ -42,6 +42,22 @@ class JSONFormatter(logging.Formatter):
 
         if hasattr(record, "stack_trace"):
             log_entry["stack_trace"] = record.stack_trace
+
+        # Phase 1: Context Management fields
+        if hasattr(record, "request_id"):
+            log_entry["request_id"] = record.request_id
+
+        if hasattr(record, "project_id"):
+            log_entry["project_id"] = record.project_id
+
+        if hasattr(record, "processing_time_ms"):
+            log_entry["processing_time_ms"] = record.processing_time_ms
+
+        if hasattr(record, "error_code"):
+            log_entry["error_code"] = record.error_code
+
+        if hasattr(record, "details"):
+            log_entry["details"] = record.details
 
         # Add exception info if present
         if record.exc_info:
@@ -94,88 +110,6 @@ def setup_logging() -> None:
     # Configure specific loggers
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-    # Set up request logging
-    setup_request_logging()
-
-
-def setup_request_logging() -> None:
-    """Set up request/response logging middleware."""
-
-    class RequestLoggingMiddleware:
-        """Middleware for logging HTTP requests and responses."""
-
-        def __init__(self, app):
-            self.app = app
-            self.logger = logging.getLogger("llt.request")
-
-        async def __call__(self, scope, receive, send):
-            """Process request and log details."""
-            if scope["type"] != "http":
-                await self.app(scope, receive, send)
-                return
-
-            import time
-            from uuid import uuid4
-
-            correlation_id = str(uuid4())
-            start_time = time.time()
-
-            # Log request
-            method = scope["method"]
-            path = scope["path"]
-
-            self.logger.info(
-                "Request started",
-                extra={
-                    "correlation_id": correlation_id,
-                    "event": "request_started",
-                    "method": method,
-                    "path": path,
-                    "query_string": scope.get("query_string", b"").decode(),
-                },
-            )
-
-            # Wrap send to capture response
-            async def wrapped_send(message):
-                if message["type"] == "http.response.start":
-                    status_code = message["status"]
-                    duration_ms = int((time.time() - start_time) * 1000)
-
-                    self.logger.info(
-                        "Request completed",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "event": "request_completed",
-                            "method": method,
-                            "path": path,
-                            "status_code": status_code,
-                            "duration_ms": duration_ms,
-                        },
-                    )
-
-                await send(message)
-
-            try:
-                await self.app(scope, receive, wrapped_send)
-            except Exception as e:
-                duration_ms = int((time.time() - start_time) * 1000)
-
-                self.logger.error(
-                    "Request failed",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "event": "request_failed",
-                        "method": method,
-                        "path": path,
-                        "duration_ms": duration_ms,
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                    },
-                    exc_info=True,
-                )
-
-                raise
 
 
 def log_analysis_request(correlation_id: str, file_count: int, mode: str) -> None:

@@ -1,0 +1,1032 @@
+# Feature 2: Coverage Optimization - Architecture and Implementation
+
+**Document Version:** 1.0
+**Last Updated:** 2025-11-25
+**Author:** Architecture Documentation
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture Layers](#architecture-layers)
+3. [Request Flow](#request-flow)
+4. [Coverage Analysis Integration](#coverage-analysis-integration)
+5. [LLM Prompt Engineering](#llm-prompt-engineering)
+6. [Response Parsing and Formatting](#response-parsing-and-formatting)
+7. [Task Management](#task-management)
+8. [API Endpoints](#api-endpoints)
+9. [Example Usage](#example-usage)
+10. [Integration with Frontend](#integration-with-frontend)
+11. [Performance Characteristics](#performance-characteristics)
+12. [Testing Strategy](#testing-strategy)
+13. [Comparison with Feature 1](#comparison-with-feature-1)
+14. [Summary](#summary)
+
+---
+
+## Overview
+
+Feature 2 (Coverage Optimization) provides **targeted test generation** to fill specific coverage gaps identified by code coverage tools. Unlike Feature 1 (general test generation), this feature focuses on generating tests for **uncovered lines and branches** to maximize coverage efficiency.
+
+### Key Capabilities
+
+- **Coverage-Aware Generation**: Targets specific uncovered code ranges
+- **Branch Coverage Support**: Handles both line and branch coverage gaps
+- **Context-Aware**: Uses existing test code to avoid duplication
+- **Insertion Guidance**: Provides recommended line numbers for test insertion
+- **Impact Prediction**: Estimates expected coverage improvement
+
+### Use Cases
+
+1. **CI/CD Coverage Gates**: Automatically generate tests to meet coverage thresholds
+2. **Coverage Improvement**: Incrementally improve existing test suites
+3. **Branch Coverage**: Generate tests for untested conditional paths
+4. **Code Review**: Suggest tests for newly added code with low coverage
+
+### Problem Solved
+
+**Before Feature 2:**
+```python
+# Source code
+def calculate_discount(price, member_type):
+    if member_type == "gold":
+        return price * 0.7      # ✅ Covered
+    elif member_type == "silver":
+        return price * 0.85     # ❌ NOT covered
+    else:
+        return price           # ❌ NOT covered
+
+# Existing tests only cover gold members
+def test_gold_discount():
+    assert calculate_discount(100, "gold") == 70
+```
+
+**After Feature 2:**
+```python
+# Frontend provides uncovered ranges:
+# - Lines 4-5 (silver branch)
+# - Lines 6-7 (default branch)
+
+# Backend generates targeted tests:
+def test_silver_discount():
+    assert calculate_discount(100, "silver") == 85
+
+def test_no_discount():
+    assert calculate_discount(100, "regular") == 100
+```
+
+---
+
+## Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   API Layer                                  │
+│  POST /optimization/coverage (routes.py:250)                │
+│  GET /tasks/{task_id} (shared with Feature 1)               │
+│  - Validates uncovered_ranges                                │
+│  - Creates async task                                        │
+└────────────────────┬─────────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Task Execution Layer                            │
+│  execute_coverage_optimization_task (tasks.py:350)          │
+│  - Background async execution                                │
+│  - Status updates (pending → processing → completed)        │
+│  - Error handling and recovery                               │
+└────────────────────┬─────────────────────────────────────────┘
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼             ▼
+┌──────────────┬──────────────┬─────────────────────┐
+│ LLM Client   │ Message      │  Response Parser    │
+│ (shared)     │ Builder      │  (JSON + fallback)  │
+│              │              │                     │
+│ - Same as    │ - Coverage   │  - Structured       │
+│   Feature 1  │   context    │    output           │
+│ - Retries    │ - Range      │  - Flexible         │
+│ - Timeouts   │   formatting │    parsing          │
+└──────────────┴──────────────┴─────────────────────┘
+```
+
+### Layer Responsibilities
+
+#### 1. API Layer (routes.py:250)
+- Receives `CoverageOptimizationRequest` with uncovered ranges
+- Validates coverage data structure
+- Creates async task and returns `task_id`
+- Shares polling endpoint with Feature 1
+
+#### 2. Task Execution Layer (tasks.py:350)
+- Executes coverage optimization in background
+- Builds coverage-specific LLM prompts
+- Parses structured responses (JSON preferred)
+- Formats recommendations per OpenAPI spec
+
+#### 3. LLM Client Layer
+- **Shared with Feature 1**: Same retry logic, timeout handling
+- **Higher token limit**: 3000 tokens (vs 2000) for multiple test recommendations
+
+---
+
+## Request Flow
+
+### Step 1: Frontend Analyzes Coverage Report
+
+```xml
+<!-- coverage.xml (generated by pytest-cov) -->
+<coverage>
+  <packages>
+    <package name="app">
+      <classes>
+        <class filename="app/utils.py">
+          <lines>
+            <line number="10" hits="1"/>
+            <line number="11" hits="1"/>
+            <line number="12" hits="0"/>  <!-- Uncovered -->
+            <line number="13" hits="0"/>  <!-- Uncovered -->
+            <line number="14" hits="1"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+```
+
+**Frontend Parsing:**
+- Identifies uncovered lines (hits=0)
+- Groups consecutive uncovered lines into ranges
+- Extracts branch coverage information (if available)
+
+---
+
+### Step 2: Frontend Submits Optimization Request
+
+```http
+POST /optimization/coverage HTTP/1.1
+Content-Type: application/json
+
+{
+  "source_code": "def calculate_discount(price, member_type):\n    if member_type == \"gold\":\n        return price * 0.7\n    elif member_type == \"silver\":\n        return price * 0.85\n    else:\n        return price",
+  "existing_test_code": "def test_gold_discount():\n    assert calculate_discount(100, \"gold\") == 70",
+  "uncovered_ranges": [
+    {
+      "start_line": 4,
+      "end_line": 5,
+      "type": "branch"
+    },
+    {
+      "start_line": 6,
+      "end_line": 7,
+      "type": "branch"
+    }
+  ],
+  "framework": "pytest"
+}
+```
+
+**Request Schema (`CoverageOptimizationRequest`):**
+```python
+class CoverageOptimizationRequest(BaseModel):
+    source_code: str                                    # Required
+    existing_test_code: Optional[str] = None            # Optional
+    uncovered_ranges: List[CoverageUncoveredRange]      # Required
+    framework: Literal["pytest", "unittest"] = "pytest" # Default pytest
+```
+
+---
+
+### Step 3: API Creates Task (Same as Feature 1)
+
+```python
+# routes.py:250-298
+@router.post("/optimization/coverage", response_model=AsyncJobResponse)
+async def submit_coverage_optimization(request: CoverageOptimizationRequest):
+    # Convert request to task payload
+    task_payload = request.model_dump()
+
+    # Create task
+    task_id = await create_task(task_payload)
+
+    # Launch background task
+    asyncio.create_task(
+        execute_coverage_optimization_task(task_id, task_payload)
+    )
+
+    # Return task_id immediately
+    return AsyncJobResponse(
+        task_id=task_id,
+        status="pending",
+        estimated_time_seconds=30
+    )
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "task_id": "b8c4d5e6-f7a8-9012-3456-789abcdef012",
+  "status": "pending",
+  "estimated_time_seconds": 30
+}
+```
+
+---
+
+### Step 4: Background Task Execution
+
+```python
+# tasks.py:350-377
+async def execute_coverage_optimization_task(task_id: str, payload: Dict[str, Any]):
+    try:
+        # Update status to PROCESSING
+        await update_task_status(task_id, TaskStatus.PROCESSING)
+
+        # Generate coverage optimization using LLM
+        optimization_result = await _generate_coverage_optimization_from_llm(payload)
+
+        # Format result as CoverageOptimizationResult
+        result = {
+            "recommended_tests": optimization_result["recommended_tests"]
+        }
+
+        # Update status to COMPLETED
+        await update_task_status(task_id, TaskStatus.COMPLETED, result=result)
+
+    except Exception as exc:
+        # Update status to FAILED
+        await update_task_status(task_id, TaskStatus.FAILED, error=str(exc))
+```
+
+---
+
+### Step 5: LLM Coverage Optimization
+
+```python
+# tasks.py:380-416
+async def _generate_coverage_optimization_from_llm(payload: Dict[str, Any]):
+    # Extract fields
+    source_code = payload.get("source_code", "")
+    existing_test_code = payload.get("existing_test_code", "")
+    uncovered_ranges = payload.get("uncovered_ranges", [])
+    framework = payload.get("framework", "pytest")
+
+    # Build coverage-specific messages
+    messages = _build_coverage_optimization_messages(
+        source_code, existing_test_code, uncovered_ranges, framework
+    )
+
+    # Call LLM with higher token limit
+    client = create_llm_client()
+    try:
+        raw_response = await client.chat_completion(
+            messages=messages,
+            temperature=0.2,
+            max_tokens=3000  # Higher for multiple recommendations
+        )
+
+        # Parse structured response
+        return _parse_coverage_optimization_response(raw_response)
+    finally:
+        await client.close()
+```
+
+---
+
+### Step 6: Client Polls for Result
+
+```http
+GET /tasks/b8c4d5e6-f7a8-9012-3456-789abcdef012 HTTP/1.1
+```
+
+**Response (200 OK - COMPLETED):**
+```json
+{
+  "task_id": "b8c4d5e6-f7a8-9012-3456-789abcdef012",
+  "status": "completed",
+  "created_at": "2025-11-25T11:00:00Z",
+  "result": {
+    "recommended_tests": [
+      {
+        "test_code": "def test_silver_discount():\n    assert calculate_discount(100, \"silver\") == 85",
+        "target_line": 42,
+        "scenario_description": "Test silver member discount calculation",
+        "expected_coverage_impact": "Covers lines 4-5 (silver branch)"
+      },
+      {
+        "test_code": "def test_no_discount():\n    assert calculate_discount(100, \"regular\") == 100",
+        "target_line": 47,
+        "scenario_description": "Test default case with no discount",
+        "expected_coverage_impact": "Covers lines 6-7 (default branch)"
+      }
+    ]
+  },
+  "error": null
+}
+```
+
+---
+
+## Coverage Analysis Integration
+
+### Coverage Data Flow
+
+```
+┌──────────────────┐
+│  pytest-cov      │  Test Execution
+│  coverage.py     │
+└────────┬─────────┘
+         │ generates
+         ▼
+┌──────────────────┐
+│  coverage.xml    │  Coverage Report (XML)
+└────────┬─────────┘
+         │ parsed by
+         ▼
+┌──────────────────┐
+│  Frontend        │  Coverage Parser
+│  (TypeScript)    │
+└────────┬─────────┘
+         │ extracts uncovered_ranges
+         ▼
+┌──────────────────┐
+│  Backend API     │  POST /optimization/coverage
+│  Feature 2       │
+└──────────────────┘
+```
+
+### Uncovered Range Types
+
+```python
+class CoverageUncoveredRange(BaseModel):
+    start_line: int              # 1-indexed line number
+    end_line: int                # Inclusive
+    type: Literal["line", "branch"]  # Coverage type
+```
+
+**Example Scenarios:**
+
+#### Line Coverage Gap
+```python
+# Source code
+def calculate_tax(income):
+    if income > 50000:
+        return income * 0.3
+    return income * 0.1  # ❌ Line 4 uncovered
+
+# Coverage data
+{
+  "start_line": 4,
+  "end_line": 4,
+  "type": "line"
+}
+```
+
+#### Branch Coverage Gap
+```python
+# Source code
+def validate_user(age):
+    if age >= 18:         # Branch 1: True ✅ covered
+        return "adult"
+    else:                 # Branch 2: False ❌ uncovered
+        return "minor"
+
+# Coverage data
+{
+  "start_line": 3,
+  "end_line": 4,
+  "type": "branch"
+}
+```
+
+---
+
+## LLM Prompt Engineering
+
+### System Prompt (Same as Feature 1)
+
+```python
+SYSTEM_PROMPT = (
+    "You are an expert Python test engineer. Generate high-quality pytest tests, "
+    "covering edge cases, error handling, and clear assertions. Ensure the output "
+    "is ready to paste into a test file."
+)
+```
+
+---
+
+### User Prompt Construction
+
+```python
+# tasks.py:482-551
+def _build_coverage_optimization_messages(
+    source_code: str,
+    existing_test_code: str,
+    uncovered_ranges: list,
+    framework: str
+) -> list[Dict[str, str]]:
+    # Format uncovered ranges for prompt
+    ranges_text = ""
+    for i, rng in enumerate(uncovered_ranges, 1):
+        start_line = rng.get("start_line", "unknown")
+        end_line = rng.get("end_line", "unknown")
+        rng_type = rng.get("type", "unknown")
+        ranges_text += f"  {i}. Lines {start_line}-{end_line} ({rng_type} coverage)\n"
+
+    user_prompt = f"""
+You are an expert Python test engineer specializing in coverage optimization.
+
+**Source code to increase coverage:**
+```python
+{source_code.strip()}
+```
+
+**Current test code (for context):**
+```python
+{existing_test_code.strip() if existing_test_code else "# No existing tests"}
+```
+
+**Uncovered ranges identified by coverage analysis:**
+{ranges_text}
+
+**Framework:** {framework}
+
+**Your task:**
+Generate targeted test cases to fill these specific coverage gaps.
+Focus on:
+1. Testing the exact uncovered lines/ranges
+2. Edge cases that might not be covered
+3. Clear, maintainable test code
+
+**Output format:**
+Provide a JSON object with a "recommended_tests" array containing:
+- "test_code": Python code for the test
+- "target_line": Suggested line number to add this test
+- "scenario_description": Brief description of what this test covers
+- "expected_coverage_impact": What lines/branches this will cover
+
+Example output:
+```json
+{{
+  "recommended_tests": [
+    {{
+      "test_code": "def test_add_negative_numbers():\\n    assert add(-1, -2) == -3",
+      "target_line": 42,
+      "scenario_description": "Test addition with negative numbers",
+      "expected_coverage_impact": "Covers line 5-6 in calculate_tax function"
+    }}
+  ]
+}}
+```
+"""
+
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt.strip()}
+    ]
+```
+
+### Key Prompt Design Choices
+
+1. **Explicit Coverage Context**: Clearly lists uncovered ranges
+2. **Existing Test Awareness**: Prevents duplicate test generation
+3. **Structured Output**: Requests JSON for reliable parsing
+4. **Target Line Guidance**: Helps frontend with insertion positioning
+5. **Impact Prediction**: Encourages LLM to reason about coverage
+
+---
+
+## Response Parsing and Formatting
+
+### Multi-Strategy Parser
+
+```python
+# tasks.py:419-479
+def _parse_coverage_optimization_response(raw_response: str) -> Dict[str, Any]:
+    import re
+
+    # Strategy 1: Try JSON code block
+    json_block_pattern = r"```json\n(.*?)\n```"
+    json_blocks = re.findall(json_block_pattern, raw_response, re.DOTALL)
+
+    if json_blocks:
+        try:
+            data = json.loads(json_blocks[0].strip())
+            if "recommended_tests" in data:
+                return data
+        except json.JSONDecodeError:
+            pass  # Fall through to next strategy
+
+    # Strategy 2: Try direct JSON parsing
+    try:
+        data = json.loads(raw_response.strip())
+        if "recommended_tests" in data:
+            return data
+    except json.JSONDecodeError:
+        pass  # Fall through to fallback
+
+    # Strategy 3: Fallback - extract Python code blocks
+    code_block_pattern = r"```python\n(.*?)\n```"
+    code_blocks = re.findall(code_block_pattern, raw_response, re.DOTALL)
+
+    recommended_tests = []
+    for i, code in enumerate(code_blocks):
+        target_line = DEFAULT_TARGET_LINE_START + (i * TARGET_LINE_SPACING)
+        recommended_tests.append({
+            "test_code": code.strip(),
+            "target_line": target_line,
+            "scenario_description": f"Test case {i + 1} to cover uncovered code",
+            "expected_coverage_impact": "Covers previously uncovered lines"
+        })
+
+    # Strategy 4: Final fallback - treat entire response as code
+    if not recommended_tests:
+        recommended_tests.append({
+            "test_code": raw_response.strip(),
+            "target_line": DEFAULT_FALLBACK_TARGET_LINE,
+            "scenario_description": "Generated test based on coverage analysis",
+            "expected_coverage_impact": "Improves overall coverage"
+        })
+
+    return {"recommended_tests": recommended_tests}
+```
+
+### Parsing Strategies
+
+| Strategy | Priority | Description | Example |
+|----------|----------|-------------|---------|
+| **JSON Block** | 1st | Extract from ````json` block | Ideal output |
+| **Direct JSON** | 2nd | Parse entire response as JSON | No code fences |
+| **Python Blocks** | 3rd | Extract from ````python` blocks | Partial structure |
+| **Raw Fallback** | 4th | Treat as single test | Unstructured |
+
+### Example Parsing
+
+**LLM Response (Ideal):**
+```
+Here are the recommended tests:
+
+```json
+{
+  "recommended_tests": [
+    {
+      "test_code": "def test_silver_discount():\n    assert calculate_discount(100, \"silver\") == 85",
+      "target_line": 42,
+      "scenario_description": "Test silver member discount",
+      "expected_coverage_impact": "Covers lines 4-5"
+    }
+  ]
+}
+```
+```
+
+**Parsed Result:**
+```python
+{
+  "recommended_tests": [
+    {
+      "test_code": "def test_silver_discount():\n    assert calculate_discount(100, \"silver\") == 85",
+      "target_line": 42,
+      "scenario_description": "Test silver member discount",
+      "expected_coverage_impact": "Covers lines 4-5"
+    }
+  ]
+}
+```
+
+---
+
+## Task Management
+
+### Shared Infrastructure with Feature 1
+
+Feature 2 uses the **same task management infrastructure** as Feature 1:
+- Same Redis/in-memory storage backend
+- Same task lifecycle (PENDING → PROCESSING → COMPLETED/FAILED)
+- Same 24-hour TTL
+- Same polling endpoint (`GET /tasks/{task_id}`)
+
+### Task Result Format
+
+```python
+# Feature 2 result structure
+{
+  "recommended_tests": [
+    {
+      "test_code": str,                      # Generated test code
+      "target_line": int,                    # Suggested insertion line
+      "scenario_description": str,           # What this test covers
+      "expected_coverage_impact": str        # Coverage improvement
+    }
+  ]
+}
+```
+
+**Comparison with Feature 1:**
+```python
+# Feature 1 result structure
+{
+  "generated_code": str,      # Complete test file
+  "explanation": str          # Generation explanation
+}
+```
+
+---
+
+## API Endpoints
+
+### POST /optimization/coverage
+
+**Purpose:** Submit coverage optimization request
+
+**Request:**
+```json
+{
+  "source_code": "def foo(x):\n    if x > 0:\n        return x\n    return 0",
+  "existing_test_code": "def test_positive():\n    assert foo(5) == 5",
+  "uncovered_ranges": [
+    {"start_line": 4, "end_line": 4, "type": "line"}
+  ],
+  "framework": "pytest"
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "task_id": "uuid",
+  "status": "pending",
+  "estimated_time_seconds": 30
+}
+```
+
+**Error (400 Bad Request):**
+```json
+{
+  "detail": "uncovered_ranges cannot be empty"
+}
+```
+
+---
+
+### GET /tasks/{task_id}
+
+**Shared with Feature 1** - Same endpoint, different result structure
+
+**Response (200 OK - Feature 2 Completed):**
+```json
+{
+  "task_id": "uuid",
+  "status": "completed",
+  "result": {
+    "recommended_tests": [...]  // Feature 2 result
+  }
+}
+```
+
+**Response (200 OK - Feature 1 Completed):**
+```json
+{
+  "task_id": "uuid",
+  "status": "completed",
+  "result": {
+    "generated_code": "...",  // Feature 1 result
+    "explanation": "..."
+  }
+}
+```
+
+**Frontend Detection:**
+```typescript
+// Frontend can differentiate by result structure
+if ("recommended_tests" in result) {
+  // Feature 2 - Coverage Optimization
+  handleCoverageResult(result);
+} else if ("generated_code" in result) {
+  // Feature 1 - Test Generation
+  handleGenerationResult(result);
+}
+```
+
+---
+
+## Example Usage
+
+### Python Client Example
+
+```python
+import httpx
+import asyncio
+
+async def optimize_coverage():
+    client = httpx.AsyncClient(base_url="http://localhost:8886")
+
+    # Parse coverage.xml (simplified)
+    uncovered_ranges = [
+        {"start_line": 12, "end_line": 13, "type": "branch"},
+        {"start_line": 18, "end_line": 18, "type": "line"}
+    ]
+
+    # Submit optimization request
+    response = await client.post("/optimization/coverage", json={
+        "source_code": open("app/utils.py").read(),
+        "existing_test_code": open("tests/test_utils.py").read(),
+        "uncovered_ranges": uncovered_ranges,
+        "framework": "pytest"
+    })
+    task_id = response.json()["task_id"]
+
+    # Poll for result
+    while True:
+        response = await client.get(f"/tasks/{task_id}")
+        task = response.json()
+
+        if task["status"] == "completed":
+            for test in task["result"]["recommended_tests"]:
+                print(f"Test: {test['scenario_description']}")
+                print(f"Insert at line: {test['target_line']}")
+                print(f"Code:\n{test['test_code']}\n")
+                print(f"Impact: {test['expected_coverage_impact']}\n")
+            break
+
+        elif task["status"] == "failed":
+            print(f"Failed: {task['error']['message']}")
+            break
+
+        await asyncio.sleep(2)
+
+asyncio.run(optimize_coverage())
+```
+
+### cURL Example
+
+```bash
+# Submit coverage optimization
+curl -X POST http://localhost:8886/optimization/coverage \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_code": "def divide(a, b):\n    if b == 0:\n        raise ValueError\n    return a / b",
+    "existing_test_code": "def test_divide_normal():\n    assert divide(10, 2) == 5",
+    "uncovered_ranges": [
+      {"start_line": 2, "end_line": 3, "type": "branch"}
+    ],
+    "framework": "pytest"
+  }' | jq '.task_id'
+
+# Poll for result
+curl -s http://localhost:8886/tasks/{task_id} | jq '.result.recommended_tests'
+```
+
+---
+
+## Integration with Frontend
+
+### Frontend Responsibilities
+
+1. **Parse Coverage Report**: Extract uncovered lines/branches from `coverage.xml`
+2. **Group Ranges**: Combine consecutive uncovered lines into ranges
+3. **Submit Request**: POST to `/optimization/coverage` with structured data
+4. **Display Results**: Show ghost text or suggestions at recommended lines
+
+### Coverage XML Parsing (Frontend)
+
+```typescript
+// Example TypeScript coverage parser
+interface UncoveredRange {
+  start_line: number;
+  end_line: number;
+  type: "line" | "branch";
+}
+
+function parseCoverageXML(xml: string, filePath: string): UncoveredRange[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "text/xml");
+
+  const lines = doc.querySelectorAll(`class[filename="${filePath}"] line`);
+  const uncovered: number[] = [];
+
+  lines.forEach((line) => {
+    if (line.getAttribute("hits") === "0") {
+      uncovered.push(parseInt(line.getAttribute("number")!));
+    }
+  });
+
+  // Group consecutive lines into ranges
+  return groupIntoRanges(uncovered);
+}
+```
+
+### Ghost Text Display (Frontend)
+
+```typescript
+// VSCode extension example
+async function showCoverageOptimizations(editor: vscode.TextEditor) {
+  const result = await pollTaskResult(taskId);
+
+  result.recommended_tests.forEach((test) => {
+    const position = new vscode.Position(test.target_line - 1, 0);
+
+    // Show inline suggestion (ghost text)
+    const decoration = vscode.window.createTextEditorDecorationType({
+      after: {
+        contentText: ` // ${test.scenario_description}`,
+        color: "gray",
+        fontStyle: "italic"
+      }
+    });
+
+    editor.setDecorations(decoration, [new vscode.Range(position, position)]);
+  });
+}
+```
+
+---
+
+## Performance Characteristics
+
+### Latency Breakdown
+
+| Phase | Time (Typical) | Notes |
+|-------|---------------|-------|
+| Task Creation | ~10ms | Same as Feature 1 |
+| LLM API Call | 8-40 seconds | Longer due to structured output |
+| Response Parsing | ~10ms | JSON parsing + fallback |
+| Task Status Update | ~10ms | Redis write |
+| **Total** | **8-40 seconds** | Dominated by LLM |
+
+**Why Longer than Feature 1?**
+- More complex prompt (coverage context)
+- Structured JSON output requires more reasoning
+- Multiple test recommendations (vs single test file)
+- Higher max_tokens (3000 vs 2000)
+
+### Token Usage
+
+| Component | Tokens (Estimate) |
+|-----------|-------------------|
+| System Prompt | ~50 tokens |
+| Coverage Context | ~100-300 tokens |
+| Source Code | ~100-300 tokens |
+| Existing Tests | ~100-400 tokens |
+| Output (JSON) | ~300-800 tokens |
+| **Total per Request** | **~650-1,900 tokens** |
+
+**Cost Estimate (GPT-4):**
+- Input: ~$0.02-0.04 per request
+- Output: ~$0.02-0.05 per request
+- **Total: ~$0.04-0.09 per optimization** (1.5x Feature 1)
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+```python
+# Test response parsing with JSON
+def test_parse_coverage_response_json():
+    raw = '{"recommended_tests": [{"test_code": "def test_foo(): pass", "target_line": 42, "scenario_description": "Test foo", "expected_coverage_impact": "Lines 10-15"}]}'
+    result = _parse_coverage_optimization_response(raw)
+    assert len(result["recommended_tests"]) == 1
+    assert result["recommended_tests"][0]["target_line"] == 42
+
+# Test fallback parsing
+def test_parse_coverage_response_fallback():
+    raw = "```python\ndef test_bar(): pass\n```"
+    result = _parse_coverage_optimization_response(raw)
+    assert "test_bar" in result["recommended_tests"][0]["test_code"]
+```
+
+### Integration Tests
+
+```python
+@pytest.mark.asyncio
+async def test_coverage_optimization_task_success():
+    payload = {
+        "source_code": "def foo(x):\n    if x > 0:\n        return x\n    return 0",
+        "uncovered_ranges": [{"start_line": 4, "end_line": 4, "type": "line"}]
+    }
+
+    task_id = await create_task(payload)
+
+    with patch("app.core.llm.llm_client.LLMClient.chat_completion") as mock:
+        mock.return_value = '{"recommended_tests": [{"test_code": "def test_zero(): pass", "target_line": 10, "scenario_description": "Test zero", "expected_coverage_impact": "Line 4"}]}'
+        await execute_coverage_optimization_task(task_id, payload)
+
+    task = await get_task(task_id)
+    assert task["status"] == "completed"
+    assert len(task["result"]["recommended_tests"]) == 1
+```
+
+### E2E Tests
+
+```python
+@pytest.mark.e2e
+async def test_coverage_optimization_api_flow(test_client):
+    response = await test_client.post("/optimization/coverage", json={
+        "source_code": "def divide(a, b):\n    return a / b",
+        "uncovered_ranges": [{"start_line": 2, "end_line": 2, "type": "line"}],
+        "framework": "pytest"
+    })
+    assert response.status_code == 202
+    task_id = response.json()["task_id"]
+
+    # Poll until completed
+    for _ in range(60):
+        response = await test_client.get(f"/tasks/{task_id}")
+        if response.json()["status"] == "completed":
+            break
+        await asyncio.sleep(2)
+
+    result = response.json()["result"]
+    assert "recommended_tests" in result
+    assert len(result["recommended_tests"]) > 0
+```
+
+---
+
+## Comparison with Feature 1
+
+| Aspect | Feature 1 (Test Generation) | Feature 2 (Coverage Optimization) |
+|--------|----------------------------|-----------------------------------|
+| **Purpose** | General test generation | Fill specific coverage gaps |
+| **Input** | Source code + description | Source code + uncovered ranges |
+| **Context** | User description | Coverage analysis data |
+| **Output** | Single test file | Multiple targeted tests |
+| **Format** | Markdown code block | JSON structured response |
+| **Parsing** | Regex code extraction | JSON parsing + fallback |
+| **Token Limit** | 2000 | 3000 |
+| **Latency** | 5-30 seconds | 8-40 seconds |
+| **Cost** | ~$0.03-0.06 | ~$0.04-0.09 |
+| **Use Case** | Initial test creation | Coverage improvement |
+
+### Shared Infrastructure
+
+Both features share:
+- ✅ Same task management system
+- ✅ Same LLM client (retry logic, timeouts)
+- ✅ Same storage backend (Redis/in-memory)
+- ✅ Same polling endpoint (`GET /tasks/{task_id}`)
+- ✅ Same error handling patterns
+
+---
+
+## Summary
+
+### Architecture Highlights
+
+1. **Coverage-Driven Generation**: Targets specific uncovered lines/branches
+2. **Structured Output**: JSON response for reliable parsing
+3. **Flexible Fallback**: Multiple parsing strategies for robustness
+4. **Frontend Integration**: Clear interface for coverage data exchange
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| JSON output format | Easier to parse, structured data for insertion guidance |
+| Higher token limit (3000) | Accommodate multiple test recommendations |
+| Shared task infrastructure | Code reuse, consistent API |
+| Target line suggestions | Helps frontend with test insertion UX |
+
+### Trade-offs
+
+| Aspect | Pros | Cons |
+|--------|------|------|
+| **Structured output** | ✅ Reliable parsing | ❌ Higher LLM latency |
+| **Multiple tests** | ✅ Comprehensive coverage | ❌ Longer response time |
+| **Coverage context** | ✅ Targeted generation | ❌ More complex prompts |
+
+### Future Enhancements
+
+1. **Smart Prioritization**: Rank test recommendations by impact
+2. **Iterative Refinement**: Re-run after initial test execution
+3. **Branch Analysis**: Deeper reasoning about conditional paths
+4. **Coverage Prediction**: Pre-compute expected coverage before execution
+5. **Auto-Insertion**: Automatically add tests to test file (with user approval)
+
+---
+
+## References
+
+- **Source Files**:
+  - `app/api/v1/routes.py`: API endpoints (250-298)
+  - `app/core/tasks/tasks.py`: Task execution (350-551)
+  - `app/api/v1/schemas.py`: Request/response models (144-176)
+
+- **Related Features**:
+  - Feature 1: Test Generation (shared infrastructure)
+  - coverage.py: Python coverage tool
+  - pytest-cov: Pytest coverage plugin
+
+- **External Documentation**:
+  - coverage.py: https://coverage.readthedocs.io/
+  - pytest-cov: https://pytest-cov.readthedocs.io/
+
+---
+
+**Document Status:** ✅ Complete
+**Next Review:** After production testing
+**Maintainer:** Backend Team

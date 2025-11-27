@@ -27,6 +27,8 @@ servers:
 tags:
   - name: System
     description: Health and System status
+  - name: Context Management
+    description: Phase 1 - Code graph initialization and incremental updates
   - name: Feature 1 - Generation
     description: Generate new tests from scratch or descriptions
   - name: Feature 2 - Coverage
@@ -44,22 +46,323 @@ paths:
   # ============================================================================
   /health:
     get:
-      summary: System Health Check
+      summary: System Health Check with Service Status
+      description: |
+        Check overall system health including Neo4j connectivity.
+        Returns 200 with "healthy" or "degraded" status.
+
+        - **healthy**: All services operational
+        - **degraded**: API functional but Neo4j unavailable
+      operationId: healthCheck
       tags:
         - System
       responses:
         '200':
-          description: Service is healthy
+          description: Health status (may be healthy or degraded)
           content:
             application/json:
               schema:
                 type: object
+                required:
+                  - status
+                  - version
+                  - services
+                  - timestamp
                 properties:
                   status:
                     type: string
                     enum: [healthy, degraded]
+                    description: Overall system status
                   version:
                     type: string
+                    description: Application version
+                  services:
+                    type: object
+                    description: Individual service health status
+                    properties:
+                      api:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [up]
+                            description: API service status (always up)
+                      neo4j:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [up, down]
+                            description: Neo4j database status
+                          response_time_ms:
+                            type: integer
+                            nullable: true
+                            description: Query response time in milliseconds (null if down)
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Health check timestamp
+              examples:
+                healthy:
+                  summary: All services operational
+                  value:
+                    status: healthy
+                    version: "0.1.0"
+                    services:
+                      api:
+                        status: up
+                      neo4j:
+                        status: up
+                        response_time_ms: 12
+                    timestamp: "2025-11-25T10:30:00Z"
+                degraded:
+                  summary: Neo4j unavailable but API functional
+                  value:
+                    status: degraded
+                    version: "0.1.0"
+                    services:
+                      api:
+                        status: up
+                      neo4j:
+                        status: down
+                        response_time_ms: null
+                    timestamp: "2025-11-25T10:30:00Z"
+
+  # ============================================================================
+  # PHASE 1: Context Management (Code Graph)
+  # ============================================================================
+  /context/projects/initialize:
+    post:
+      summary: Initialize Project Code Graph
+      description: |
+        Initialize a new project's code dependency graph in Neo4j.
+        Creates Symbol nodes and CALLS relationships for all provided files.
+        Returns 409 if project already exists.
+      tags:
+        - Context Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitializeProjectRequest'
+      responses:
+        '201':
+          description: Project initialized successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitializeProjectResponse'
+        '409':
+          description: Project already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error - empty files or no symbols
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                empty_files:
+                  summary: Empty files array
+                  value:
+                    error: "Files array cannot be empty. At least one file with symbols is required."
+                    error_code: EMPTY_FILES
+                    details:
+                      files_count: 0
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+                    timestamp: "2025-11-25T10:30:00Z"
+                    path: "/context/projects/initialize"
+                no_symbols:
+                  summary: Files with no symbols
+                  value:
+                    error: "All files contain no symbols. Cannot initialize empty project."
+                    error_code: NO_SYMBOLS
+                    details:
+                      total_files: 3
+                      files_with_symbols: 0
+                    request_id: "550e8400-e29b-41d4-a716-446655440000"
+                    timestamp: "2025-11-25T10:30:00Z"
+                    path: "/context/projects/initialize"
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /context/projects/{project_id}/incremental:
+    patch:
+      summary: Apply Incremental Updates
+      description: |
+        Apply incremental changes to project graph with optimistic locking.
+        Uses version number to detect and prevent conflicts.
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncrementalUpdateRequest'
+      responses:
+        '200':
+          description: Update applied successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncrementalUpdateResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /context/projects/{project_id}:
+    get:
+      summary: Get Full Project Data
+      description: |
+        Retrieve complete project data including all files and their symbols.
+        Used for frontend "graceful recovery" when local cache is outdated.
+
+        The response structure mirrors the initialization request format,
+        allowing the frontend to fully rebuild its local symbol cache.
+
+        **Performance Note:** For very large projects (10k+ symbols),
+        consider implementing pagination in the future.
+      operationId: getProjectData
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      responses:
+        '200':
+          description: Project data retrieved successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDataResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /context/projects/{project_id}/status:
+    get:
+      summary: Get Project Status
+      description: |
+        Get current status and statistics of a project including
+        version number, indexed files/symbols count, and last update time.
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      responses:
+        '200':
+          description: Status retrieved successfully
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectStatusResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete Project
+      description: |
+        Delete a project and all its symbols, relationships, and metadata.
+        This operation is idempotent - returns 204 even if project doesn't exist.
+
+        **Use case:** Re-indexing workflow - delete old project data before re-initializing
+      operationId: deleteProject
+      tags:
+        - Context Management
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique project identifier
+      responses:
+        '204':
+          description: Project deleted successfully (or didn't exist)
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+                format: uuid
+        '503':
+          description: Service unavailable - database error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ============================================================================
   # FEATURE 1: Test Generation (Preserved)
@@ -208,6 +511,49 @@ components:
     # ----------------------------------------
     # Shared Schemas
     # ----------------------------------------
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - error_code
+        - request_id
+        - timestamp
+        - path
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        error_code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - EMPTY_FILES
+            - NO_SYMBOLS
+            - PROJECT_EXISTS
+            - PROJECT_NOT_FOUND
+            - VERSION_CONFLICT
+            - VALIDATION_ERROR
+            - DB_CONNECTION_ERROR
+            - DB_QUERY_ERROR
+            - INTERNAL_ERROR
+        details:
+          type: object
+          description: Additional error context
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier for tracing
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp in ISO 8601 format
+        path:
+          type: string
+          description: Request path where error occurred
+        suggestion:
+          type: string
+          description: Suggested action to resolve the error
+
     AsyncJobResponse:
       type: object
       required:
@@ -246,7 +592,11 @@ components:
             Task result varies by feature type:
             - Feature 1 (Test Generation): Returns GenerateTestsResult with generated_code and explanation
             - Feature 2 (Coverage Optimization): Returns CoverageOptimizationResult with recommended_tests array
-            Only present when status is 'completed'.
+
+            **Field Presence:**
+            - Only present when status='completed'
+            - EXCLUDED (not present) for pending/processing status
+            - Never returned as null
         error:
           type: object
           properties:
@@ -254,6 +604,280 @@ components:
               type: string
             code:
               type: string
+          description: |
+            Error details when task execution fails.
+
+            **Field Presence:**
+            - Only present when status='failed'
+            - EXCLUDED (not present) for pending/processing/completed status
+            - Never returned as null
+
+    # ----------------------------------------
+    # Phase 1: Context Management Schemas
+    # ----------------------------------------
+    SymbolInfo:
+      type: object
+      required:
+        - name
+        - kind
+        - line_start
+        - line_end
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Symbol name (function/class/method name)
+        kind:
+          type: string
+          enum: [function, class, method]
+          description: Symbol type
+        signature:
+          type: string
+          maxLength: 500
+          description: Function signature with type hints
+        line_start:
+          type: integer
+          minimum: 0
+          description: Start line number (0-based)
+        line_end:
+          type: integer
+          minimum: 0
+          description: End line number (0-based)
+        calls:
+          type: array
+          items:
+            type: string
+          description: Names of functions called by this symbol
+          default: []
+
+    FileSymbols:
+      type: object
+      required:
+        - path
+        - symbols
+      properties:
+        path:
+          type: string
+          pattern: '^[\w\-./]+\.py$'
+          description: File path relative to workspace (must be .py file)
+        symbols:
+          type: array
+          minItems: 0
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/SymbolInfo'
+          description: List of symbols extracted from this file
+
+    InitializeProjectRequest:
+      type: object
+      required:
+        - project_id
+        - workspace_path
+        - files
+      properties:
+        project_id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Unique project identifier
+        workspace_path:
+          type: string
+          description: Absolute path to workspace directory
+        language:
+          type: string
+          enum: [python]
+          default: python
+          description: Programming language (currently only Python supported)
+        files:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items:
+            $ref: '#/components/schemas/FileSymbols'
+          description: List of files with their symbols to index
+
+    InitializeProjectResponse:
+      type: object
+      required:
+        - project_id
+        - status
+        - indexed_files
+        - indexed_symbols
+        - processing_time_ms
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        status:
+          type: string
+          enum: [initialized, already_exists]
+          description: Initialization status
+        indexed_files:
+          type: integer
+          minimum: 0
+          description: Number of files indexed
+        indexed_symbols:
+          type: integer
+          minimum: 0
+          description: Number of symbols created
+        processing_time_ms:
+          type: integer
+          minimum: 0
+          description: Processing time in milliseconds
+
+    SymbolChange:
+      type: object
+      required:
+        - action
+        - symbol
+      properties:
+        action:
+          type: string
+          enum: [added, modified, deleted]
+          description: Type of change applied to the symbol
+        symbol:
+          $ref: '#/components/schemas/SymbolInfo'
+
+    FileChange:
+      type: object
+      required:
+        - file_path
+        - action
+      properties:
+        file_path:
+          type: string
+          description: Path to the changed file
+        action:
+          type: string
+          enum: [modified, deleted]
+          description: Type of file change
+        symbols_changed:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolChange'
+          description: List of symbol changes within the file
+
+    IncrementalUpdateRequest:
+      type: object
+      required:
+        - version
+        - changes
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Current backend version for optimistic locking
+        changes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FileChange'
+          description: List of file changes to apply
+
+    IncrementalUpdateResponse:
+      type: object
+      required:
+        - project_id
+        - version
+        - updated_at
+        - changes_applied
+        - processing_time_ms
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        version:
+          type: integer
+          description: New backend version after update
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of the update
+        changes_applied:
+          type: integer
+          description: Number of changes successfully applied
+        processing_time_ms:
+          type: integer
+          description: Processing time in milliseconds
+
+    ProjectStatusResponse:
+      type: object
+      required:
+        - project_id
+        - status
+        - indexed_files
+        - indexed_symbols
+        - last_updated_at
+        - backend_version
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        status:
+          type: string
+          enum: [active, indexing, error]
+          description: Current project status
+        indexed_files:
+          type: integer
+          description: Total number of indexed files
+        indexed_symbols:
+          type: integer
+          description: Total number of indexed symbols
+        last_updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        backend_version:
+          type: integer
+          description: Current backend version for optimistic locking
+
+    ProjectDataResponse:
+      type: object
+      required:
+        - project_id
+        - version
+        - files
+      properties:
+        project_id:
+          type: string
+          description: Project identifier
+        version:
+          type: integer
+          description: |
+            Current backend version number.
+            Frontend must update its local version to this value after receiving this response.
+        workspace_path:
+          type: string
+          description: Absolute path to workspace directory (if available)
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileSymbols'
+          description: |
+            List of all project files with their symbols.
+            Structure is identical to the files array in InitializeProjectRequest.
+      example:
+        project_id: "inc-test-1764069594"
+        version: 3
+        workspace_path: "/Users/user/my-project"
+        files:
+          - path: "src/services.py"
+            symbols:
+              - name: "get_user"
+                kind: "function"
+                signature: "(user_id: int) -> dict"
+                line_start: 5
+                line_end: 11
+                calls: []
+          - path: "src/utils.py"
+            symbols:
+              - name: "helper_func"
+                kind: "function"
+                signature: "() -> bool"
+                line_start: 2
+                line_end: 4
+                calls: []
 
     # ----------------------------------------
     # Feature 1 Schemas
@@ -282,6 +906,25 @@ components:
               default: new
             target_function:
               type: string
+        debug_options:
+          type: object
+          description: |
+            **For Development and Testing ONLY**
+            Debug configuration to simulate task failures.
+            WARNING: Never use in production environments.
+          properties:
+            simulate_error:
+              type: boolean
+              default: false
+              description: If true, immediately fail the task without executing business logic
+            error_message:
+              type: string
+              default: "Simulated error for testing purposes"
+              description: Custom error message to return when simulating failure
+            error_code:
+              type: string
+              default: "SIMULATED_ERROR"
+              description: Optional error code for testing error handling
 
     GenerateTestsResult:
       type: object
@@ -324,6 +967,25 @@ components:
           type: string
           enum: [pytest, unittest]
           default: pytest
+        debug_options:
+          type: object
+          description: |
+            **For Development and Testing ONLY**
+            Debug configuration to simulate task failures.
+            WARNING: Never use in production environments.
+          properties:
+            simulate_error:
+              type: boolean
+              default: false
+              description: If true, immediately fail the task without executing business logic
+            error_message:
+              type: string
+              default: "Simulated error for testing purposes"
+              description: Custom error message to return when simulating failure
+            error_code:
+              type: string
+              default: "SIMULATED_ERROR"
+              description: Optional error code for testing error handling
 
     CoverageOptimizationResult:
       type: object
