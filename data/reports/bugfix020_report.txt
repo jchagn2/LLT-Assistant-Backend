@@ -1,0 +1,22 @@
+ID: bugfix020
+
+=== Source Info / 源信息 ===
+Repo 仓库: iambus/xunlei-lixian
+File 文件: lixian_commands/download.py
+Buggy SHA (before fix): 9df0807782773df03990502fdfb784a16c8d129f
+Fixed SHA (after fix): e59f3c926abaa73b88a4d64dcdef0376f0713d53
+Parent commit URL: https://github.com/iambus/xunlei-lixian/commit/9df0807782773df03990502fdfb784a16c8d129f
+Fix commit URL: https://github.com/iambus/xunlei-lixian/commit/e59f3c926abaa73b88a4d64dcdef0376f0713d53
+Commit message: if hash fails, don't delete file. instead, rename it to *.error
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: False
+short_label: hash_check_file_deletion_bug
+
+bug_description:
+在buggy_code中，当哈希检查失败时，程序会立即删除文件(os.remove(path))，然后重新下载。如果重新下载也失败，原始文件就丢失了。fixed
+版本将文件重命名为添加.error后缀，保留了原始文件以便调试和恢复。

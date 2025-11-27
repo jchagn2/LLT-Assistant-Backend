@@ -1,0 +1,29 @@
+ID: bugfix040
+
+=== Source Info / 源信息 ===
+Repo 仓库: initstring/cloud_enum
+File 文件: enum_tools/azure_checks.py
+Buggy SHA (before fix): ecf4ca608a8630f13823ba089f6e3a4b3c169877
+Fixed SHA (after fix): e9f4a245cff0a05380311f194e8da65226355b35
+Parent commit URL: https://github.com/initstring/cloud_enum/commit/ecf4ca608a8630f13823ba089f6e3a4b3c169877
+Fix commit URL: https://github.com/initstring/cloud_enum/commit/e9f4a245cff0a05380311f194e8da65226355b35
+Commit message: Log formats and general improvements (#47)
+
+- Added logging formats (text, csv, json)
+- Linting
+- Additional exception handling
+- Better GCP AppEngine enumeration
+- Handling of rare DNS issues
+Changes (lines changed): 115
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: connection_error_handling_missing
+
+bug_description:
+在brute_force_containers函数中，buggy版本没有处理网络连接错误。当requests.get()遇到连接问题时（如DNS解析失败、网络超
+时等），会抛出requests.exceptions.ConnectionError异常，导致程序崩溃。fixed版本添加了try-
+except块来捕获并处理这些连接错误，使程序能够继续运行而不是崩溃。

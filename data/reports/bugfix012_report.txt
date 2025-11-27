@@ -1,0 +1,26 @@
+ID: bugfix012
+
+=== Source Info / 源信息 ===
+Repo 仓库: salesforce/awd-lstm-lm
+File 文件: embed_regularize.py
+Buggy SHA (before fix): 4582a1e9ecb1de177c01d01510dccd00b9abbbde
+Fixed SHA (after fix): 28683b20154fce8e5812aeb6403e35010348c3ea
+Parent commit URL: https://github.com/salesforce/awd-lstm-lm/commit/4582a1e9ecb1de177c01d01510dccd00b9abbbde
+Fix commit URL: https://github.com/salesforce/awd-lstm-lm/commit/28683b20154fce8e5812aeb6403e35010348c3ea
+Commit message: Merge pull request #5 from jph00/master
+
+- Update for PyTorch 0.2.
+- Fix LockedDropout to broadcast correct axis.
+- Use relative path for default data source.
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incorrect_backend_embedding_call
+
+bug_description:
+在buggy_code中，错误地调用了embed._backend.Embedding，将其作为构造函数创建对象后再调用，但正确的用法应该是直接调用Embedd
+ing.apply方法。fixed版本修正了调用方式，使用Embedding.apply并正确传递参数，避免了运行时错误。

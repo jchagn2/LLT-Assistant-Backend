@@ -1,0 +1,25 @@
+ID: bugfix004
+
+=== Source Info / 源信息 ===
+Repo 仓库: nicoboss/nsz
+File 文件: nsz/BlockDecompressorReader.py
+Buggy SHA (before fix): 307ea5f09b15928664f1af479cab36b1569d8636
+Fixed SHA (after fix): afdcb3b6567238d29b64738ce436a0ce0c3d63f1
+Parent commit URL: https://github.com/nicoboss/nsz/commit/307ea5f09b15928664f1af479cab36b1569d8636
+Fix commit URL: https://github.com/nicoboss/nsz/commit/afdcb3b6567238d29b64738ce436a0ce0c3d63f1
+Commit message: Merge pull request #211 from ITotalJustice/master
+
+fix ncz block decompression when BlockSize is a multiple of decompressedSize
+This fixes #210
+Changes (lines changed): 5
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: zero_remainder_decompression_error
+
+bug_description:
+在最后一个数据块的处理中，当解压缩大小正好是块大小的整数倍时（余数为0），buggy_code会将decompressedBlockSize设置为0，导致后续读
+取0字节数据或解压缩失败。fixed版本添加了余数检查，只有当余数大于0时才使用余数作为解压缩大小，否则保持默认的块大小。

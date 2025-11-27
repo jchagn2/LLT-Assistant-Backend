@@ -1,0 +1,23 @@
+ID: bugfix016
+
+=== Source Info / 源信息 ===
+Repo 仓库: iambus/xunlei-lixian
+File 文件: lixian_commands/readd.py
+Buggy SHA (before fix): de9e9140988a62c6a7b0fc35e72b6c3cd71367b8
+Fixed SHA (after fix): e8afff72f83d32538f837a0fd44ecae5aa7adf81
+Parent commit URL: https://github.com/iambus/xunlei-lixian/commit/de9e9140988a62c6a7b0fc35e72b6c3cd71367b8
+Fix commit URL: https://github.com/iambus/xunlei-lixian/commit/e8afff72f83d32538f837a0fd44ecae5aa7adf81
+Commit message: fix `lx add info-hash`
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: wrong_method_call_for_torrent_tasks
+
+bug_description:
+在buggy_code中，对于BT任务调用了错误的方法client.add_torrent_task_by_info_hash2，这个方法可能不存在或者参数不正
+确。fixed版本将其修正为正确的client.add_torrent_task_by_info_hash方法调用，避免了运行时AttributeError异常
+。

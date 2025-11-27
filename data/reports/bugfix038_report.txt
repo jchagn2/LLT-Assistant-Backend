@@ -1,0 +1,30 @@
+ID: bugfix038
+
+=== Source Info / 源信息 ===
+Repo 仓库: initstring/cloud_enum
+File 文件: enum_tools/aws_checks.py
+Buggy SHA (before fix): 3f44476d1493f62d6e0ac419984fdcafe4b773e5
+Fixed SHA (after fix): 0e54b48c7d9567e55b554e4065982d722de640e7
+Parent commit URL: https://github.com/initstring/cloud_enum/commit/3f44476d1493f62d6e0ac419984fdcafe4b773e5
+Fix commit URL: https://github.com/initstring/cloud_enum/commit/0e54b48c7d9567e55b554e4065982d722de640e7
+Commit message: Small gift :) nameserverfile + more Azure objects + fuzzing list improved (#65)
+
+* PR with multiple additions :)
+
+* Removed debugging thingies
+
+* Fix var not defined
+
+* bug fix brute_force_containers
+Changes (lines changed): 6
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_nameserverfile_argument
+
+bug_description:
+buggy_code 在调用 utils.fast_dns_lookup 时缺少 nameserverfile 参数，这会导致函数调用时参数不匹配而抛出
+TypeError 异常。fixed_code 在 check_awsapps 函数中添加了 nameserverfile 参数并传递到 DNS 查找函数中。

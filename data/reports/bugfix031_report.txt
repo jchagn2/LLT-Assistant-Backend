@@ -1,0 +1,24 @@
+ID: bugfix031
+
+=== Source Info / 源信息 ===
+Repo 仓库: upbit/pixivpy
+File 文件: pixivpy3/utils.py
+Buggy SHA (before fix): ecd53135f5d5f085914dd0d380be89f6f7395449
+Fixed SHA (after fix): 565548aac5de20afa54afc096645d75969dc3061
+Parent commit URL: https://github.com/upbit/pixivpy/commit/ecd53135f5d5f085914dd0d380be89f6f7395449
+Fix commit URL: https://github.com/upbit/pixivpy/commit/565548aac5de20afa54afc096645d75969dc3061
+Commit message: Merge pull request #394 from upbit/mock_tests
+
+Fix workflow, use pytest (mock JSON data) replace demp.py checks
+Changes (lines changed): 8
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: circular_import_fix
+
+bug_description:
+buggy_code 中存在循环导入问题，直接导入 CaseInsensitiveDict 会导致在运行时出现 ImportError。fixed_code
+通过使用 typing.TYPE_CHECKING 和条件导入，将导入移到类型检查块中，避免了循环导入导致的运行时错误。

@@ -1,0 +1,23 @@
+ID: bugfix015
+
+=== Source Info / 源信息 ===
+Repo 仓库: iambus/xunlei-lixian
+File 文件: lixian_commands/config.py
+Buggy SHA (before fix): ac605e88bef536b8ebf44692081b7c204879598c
+Fixed SHA (after fix): 9662beff218daf7fe8ea2fb609603da232909b80
+Parent commit URL: https://github.com/iambus/xunlei-lixian/commit/ac605e88bef536b8ebf44692081b7c204879598c
+Fix commit URL: https://github.com/iambus/xunlei-lixian/commit/9662beff218daf7fe8ea2fb609603da232909b80
+Commit message: fix login issue
+Changes (lines changed): 5
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_encypt_password_import
+
+bug_description:
+buggy_code 中导入了 encypt_password 函数但实际没有使用，而 fixed_code 移除了这个未使用的导入。在 buggy_code
+中，当处理 'password' 配置时，代码试图调用 encypt_password(password) 来加密密码，但由于 encypt_password
+函数不存在（可能是拼写错误或未定义），这会导致运行时 NameError 异常。fixed_code 直接保存明文密码而不加密，避免了运行时错误。

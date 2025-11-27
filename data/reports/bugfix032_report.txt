@@ -1,0 +1,23 @@
+ID: bugfix032
+
+=== Source Info / 源信息 ===
+Repo 仓库: upbit/pixivpy
+File 文件: example_bypass_sni.py
+Buggy SHA (before fix): d144b42947a2de667e4b01b0c4f3d37e26664de1
+Fixed SHA (after fix): e3fd59064e74e86ed0302fbb92ead3b85f540208
+Parent commit URL: https://github.com/upbit/pixivpy/commit/d144b42947a2de667e4b01b0c4f3d37e26664de1
+Fix commit URL: https://github.com/upbit/pixivpy/commit/e3fd59064e74e86ed0302fbb92ead3b85f540208
+Commit message: fix: Fix SniAPI host issue, upgrade requests to 2.31.0
+Changes (lines changed): 3
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_hostname_parameter
+
+bug_description:
+buggy_code 中调用 api.require_appapi_hosts() 时缺少必要的 hostname 参数，这会导致 API
+调用失败或连接错误。fixed_code 通过添加 hostname="public-api.secure.pixiv.net" 参数来正确配置 API
+主机地址，确保程序能够正常连接到 Pixiv 服务。

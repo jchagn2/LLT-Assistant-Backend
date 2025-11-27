@@ -1,0 +1,23 @@
+ID: bugfix024
+
+=== Source Info / 源信息 ===
+Repo 仓库: pytest-dev/pytest-cov
+File 文件: ci/bootstrap.py
+Buggy SHA (before fix): b5991fbaf25d07405a379a3a5675501bda06614f
+Fixed SHA (after fix): 97aadd74bcbc00a2078d240e8fe871dd62b83d80
+Parent commit URL: https://github.com/pytest-dev/pytest-cov/commit/b5991fbaf25d07405a379a3a5675501bda06614f
+Fix commit URL: https://github.com/pytest-dev/pytest-cov/commit/97aadd74bcbc00a2078d240e8fe871dd62b83d80
+Commit message: Update some ci config, reformat and apply some lint fixes.
+Changes (lines changed): 4
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: subprocess_text_parameter_compatibility
+
+bug_description:
+buggy_code 使用了 Python 3.7 引入的 `text=True` 参数，这在旧版本 Python 中会导致
+AttributeError。fixed_code 将其改为 `universal_newlines=True`，这是兼容旧版本 Python
+的等效参数，确保在不同 Python 版本中都能正常运行。

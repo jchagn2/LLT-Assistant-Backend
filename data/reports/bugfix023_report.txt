@@ -1,0 +1,22 @@
+ID: bugfix023
+
+=== Source Info / 源信息 ===
+Repo 仓库: 3DTopia/LGM
+File 文件: core/models.py
+Buggy SHA (before fix): 310e0dced01a1b6cee83cc9ba92daca0fe67749c
+Fixed SHA (after fix): 9a0797cdbacf8e6216d0108cb00cbe43b9cb3d81
+Parent commit URL: https://github.com/3DTopia/LGM/commit/310e0dced01a1b6cee83cc9ba92daca0fe67749c
+Fix commit URL: https://github.com/3DTopia/LGM/commit/9a0797cdbacf8e6216d0108cb00cbe43b9cb3d81
+Commit message: fix rotation normalization
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_dim_in_normalize
+
+bug_description:
+在buggy_code中，rot_act直接赋值为F.normalize函数，但没有指定dim参数。当输入张量维度大于1时，F.normalize需要明确指定归
+一化的维度。fixed版本通过lambda函数明确指定了dim=-1，确保在最后一个维度上进行归一化，避免了潜在的运行时错误。

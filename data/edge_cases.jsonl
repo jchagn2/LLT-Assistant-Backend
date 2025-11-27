@@ -1,0 +1,6 @@
+{"id":"edge01","source":"","meta":{"type":"empty_file","notes":"Empty file with no content"}}
+{"id":"edge02","source":"# this is a comment only file\n# no executable code here\n# just comments","meta":{"type":"only_comments","notes":"File contains only comments"}}
+{"id":"edge03","source":"pass","meta":{"type":"single_line","notes":"Single valid Python statement"}}
+{"id":"edge04","source":"def bad(:\n    pass","meta":{"type":"invalid_syntax","notes":"Invalid Python syntax"}} 
+{"id":"edge05","source":"    def f():\nreturn 1","meta":{"type":"bad_indentation","notes":"Incorrect indentation"}} 
+{"id":"edge06","source":"@#$% this is not python code !!!","meta":{"type":"nonsense_text","notes":"Random characters; not Python"}}

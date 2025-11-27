@@ -1,0 +1,40 @@
+ID: bugfix034
+
+=== Source Info / 源信息 ===
+Repo 仓库: kittinan/spotify-github-profile
+File 文件: util/firestore.py
+Buggy SHA (before fix): 3548a904a48e83cbda14ae83b44c6e7d80b709b8
+Fixed SHA (after fix): 7c46911bab79d0cde078cf7649adb68dfa201e7f
+Parent commit URL: https://github.com/kittinan/spotify-github-profile/commit/3548a904a48e83cbda14ae83b44c6e7d80b709b8
+Fix commit URL: https://github.com/kittinan/spotify-github-profile/commit/7c46911bab79d0cde078cf7649adb68dfa201e7f
+Commit message: Add giithub CI (#116)
+
+* Add unittest API view
+
+* Update README about run test
+
+* Ignore some files & folder
+
+* Setup pytest
+
+* Add dependencies about unittest uspport flask framework
+
+* Fixed handle edge case
+
+* Setup CI workflow
+
+* Add unittest API view sg
+
+* Fix for run test with mock
+Changes (lines changed): 7
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: missing_environment_variable_validation
+
+bug_description:
+buggy_code 没有检查 FIREBASE 环境变量是否设置，当环境变量未设置时，json.loads(b64decode(None))
+会抛出异常。fixed_code 添加了环境变量检查，如果未设置则抛出明确的 ValueError，并增加了测试环境的 mock 支持。

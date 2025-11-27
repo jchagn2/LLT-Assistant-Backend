@@ -1,0 +1,23 @@
+ID: bugfix045
+
+=== Source Info / 源信息 ===
+Repo 仓库: guillaumegenthial/sequence_tagging
+File 文件: build_data.py
+Buggy SHA (before fix): 532c4cb0627890390bf56b273a6dc5deed7a0522
+Fixed SHA (after fix): acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Parent commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/532c4cb0627890390bf56b273a6dc5deed7a0522
+Fix commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Commit message: python3 and tf1.2 support + bug fix
+Changes (lines changed): 5
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: config_object_instantiation_missing
+
+bug_description:
+buggy_code 中存在两个问题：1) 从 config 模块导入的是 config 对象而不是 Config 类，导致无法实例化；2) 在 main
+块中直接使用未实例化的 config 对象。这会导致 AttributeError 运行时错误，因为 config 对象不存在。fixed_code
+修复了这两个问题：导入 Config 类并在 main 块中正确实例化 config 对象。

@@ -1,0 +1,23 @@
+ID: bugfix021
+
+=== Source Info / 源信息 ===
+Repo 仓库: s0md3v/ReconDog
+File 文件: plugins/findSubdomains.py
+Buggy SHA (before fix): 98f984ba034b5857585247a5a78d492da361346a
+Fixed SHA (after fix): 7ea2c7100f5a582b9b8dc3e1897517ffc8f51bb6
+Parent commit URL: https://github.com/s0md3v/ReconDog/commit/98f984ba034b5857585247a5a78d492da361346a
+Fix commit URL: https://github.com/s0md3v/ReconDog/commit/7ea2c7100f5a582b9b8dc3e1897517ffc8f51bb6
+Commit message: fixed subdomain enumeration
+Changes (lines changed): 3
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incorrect_host_parameter_for_api
+
+bug_description:
+buggy_code 使用 get_tld(host, fix_protocol=True)
+提取顶级域名，但对于某些输入（如已经是顶级域名的输入）会导致错误或返回空结果。fixed_code 直接使用原始 host 参数，确保 API
+调用能正确处理各种域名格式。

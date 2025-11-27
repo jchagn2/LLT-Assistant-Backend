@@ -1,0 +1,38 @@
+ID: bugfix036
+
+=== Source Info / 源信息 ===
+Repo 仓库: noamgat/lm-format-enforcer
+File 文件: tests/common.py
+Buggy SHA (before fix): 566a20ac4bff7371d31d329731c642f0831c3ffe
+Fixed SHA (after fix): ec70f018f28c14fa07f11ced2fe4cea8790e63e1
+Parent commit URL: https://github.com/noamgat/lm-format-enforcer/commit/566a20ac4bff7371d31d329731c642f0831c3ffe
+Fix commit URL: https://github.com/noamgat/lm-format-enforcer/commit/ec70f018f28c14fa07f11ced2fe4cea8790e63e1
+Commit message: v0.11.1: Bitmasks (#168)
+
+* Minor improvements for vLLM V1 engine support
+
+* Updating github action version
+
+* WIP: bitmasks
+
+* Supporting bitmasks as internal structures in token enforcer
+
+* bitmask related fixes and some performance improvments
+
+* Added documentation before next release
+
+* Enabling vLLM to set use_bitmask=True
+Changes (lines changed): 16
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incorrect_token_validation_logic
+
+bug_description:
+buggy_code 错误地使用 `next_token not in allowed_tokens` 来检查令牌是否被允许，但
+`allowed_tokens` 是一个对象而不是集合。fixed_code 通过调用
+`allowed_tokens.is_token_allowed(next_token)` 来正确验证令牌，并修复了 `_tokenizer_data`
+的缓存机制以支持不同的 bitmask 配置。

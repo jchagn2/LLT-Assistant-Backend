@@ -1,0 +1,23 @@
+ID: bugfix025
+
+=== Source Info / 源信息 ===
+Repo 仓库: pytest-dev/pytest-cov
+File 文件: setup.py
+Buggy SHA (before fix): 629ba644a56148d09fe0f2c20602681bc20027a7
+Fixed SHA (after fix): 512c6699010cc0d8145f1f926d876cafba840015
+Parent commit URL: https://github.com/pytest-dev/pytest-cov/commit/629ba644a56148d09fe0f2c20602681bc20027a7
+Fix commit URL: https://github.com/pytest-dev/pytest-cov/commit/512c6699010cc0d8145f1f926d876cafba840015
+Commit message: Added minium version requirements for pluggin (for new-style hookwrappers). Pytest 6.2.5 is the minimum pytest that will work with that pluggy anyway, so bump that too. Fixes #698.
+Changes (lines changed): 3
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incompatible_dependency_versions
+
+bug_description:
+buggy_code 使用了过时的 pytest>=4.6 依赖版本，与较新的 Python 版本和 pytest
+生态系统不兼容，可能导致运行时导入错误或功能异常。fixed_code 将依赖更新为 pytest>=6.2.5 并添加了 pluggy>=1.2
+依赖，确保与当前 pytest 版本的兼容性。

@@ -1,0 +1,22 @@
+ID: bugfix030
+
+=== Source Info / 源信息 ===
+Repo 仓库: etsy/logster
+File 文件: logster/logster_helper.py
+Buggy SHA (before fix): c5d703e8f571d68e14d9c40f1fa28df1bc550678
+Fixed SHA (after fix): 4290c3ecb452bd2e32473c425cb76906311897a2
+Parent commit URL: https://github.com/etsy/logster/commit/c5d703e8f571d68e14d9c40f1fa28df1bc550678
+Fix commit URL: https://github.com/etsy/logster/commit/4290c3ecb452bd2e32473c425cb76906311897a2
+Commit message: Fix testing on python 2.5
+Changes (lines changed): 6
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: exception_message_format_error
+
+bug_description:
+在buggy_code中，当捕获到异常时，尝试使用e.message来格式化异常消息，但在Python 3中，Exception对象没有message属性，这会
+导致AttributeError。fixed_code移除了对e.message的引用，避免了运行时错误。

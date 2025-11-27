@@ -1,0 +1,24 @@
+ID: bugfix028
+
+=== Source Info / 源信息 ===
+Repo 仓库: CiaraStrawberry/TemporalKit
+File 文件: scripts/Ebsynth_Processing.py
+Buggy SHA (before fix): 8f1814a48d58c56b317f1ef461390c6d96596c3c
+Fixed SHA (after fix): a1f61ee0698558d963854c5f2d499cf51427d125
+Parent commit URL: https://github.com/CiaraStrawberry/TemporalKit/commit/8f1814a48d58c56b317f1ef461390c6d96596c3c
+Fix commit URL: https://github.com/CiaraStrawberry/TemporalKit/commit/a1f61ee0698558d963854c5f2d499cf51427d125
+Commit message: absurd number of bug fixes
+Changes (lines changed): 26
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: index_out_of_range_in_crossfade
+
+bug_description:
+在 crossfade_folder_of_folders 函数中，buggy_code 存在两个问题：1) 在循环处理最后一个文件夹时，错误地使用了
+len(final_dir) 而不是实际的图像文件数量，导致索引越界；2) 在交叉淡入淡出循环中，j
+的范围包含了最后一个索引，可能导致数组越界。fixed_code 修复了这些问题：1) 正确获取并排序最后一个文件夹的图像文件，从中间位置开始处理；2)
+在交叉淡入淡出循环中排除了最后一个索引，防止越界。

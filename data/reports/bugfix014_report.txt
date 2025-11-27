@@ -1,0 +1,22 @@
+ID: bugfix014
+
+=== Source Info / 源信息 ===
+Repo 仓库: BlankerL/DXY-COVID-19-Crawler
+File 文件: service/crawler.py
+Buggy SHA (before fix): 72ab7fabb0f6af1188456a1312555ee3ffea1485
+Fixed SHA (after fix): 5a9093187f98f3a71b43431acc1e8f695d6e837f
+Parent commit URL: https://github.com/BlankerL/DXY-COVID-19-Crawler/commit/72ab7fabb0f6af1188456a1312555ee3ffea1485
+Fix commit URL: https://github.com/BlankerL/DXY-COVID-19-Crawler/commit/5a9093187f98f3a71b43431acc1e8f695d6e837f
+Commit message: Bug fixed
+Changes (lines changed): 1
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: undefined_variable_in_condition
+
+bug_description:
+在buggy_code的crawler方法中，条件检查使用了未定义的变量'province_information'，这会导致NameError异常。fixed
+版本移除了这个未定义的变量引用，使程序能够正常运行。

@@ -1,0 +1,23 @@
+ID: bugfix047
+
+=== Source Info / 源信息 ===
+Repo 仓库: guillaumegenthial/sequence_tagging
+File 文件: general_utils.py
+Buggy SHA (before fix): 532c4cb0627890390bf56b273a6dc5deed7a0522
+Fixed SHA (after fix): acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Parent commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/532c4cb0627890390bf56b273a6dc5deed7a0522
+Fix commit URL: https://github.com/guillaumegenthial/sequence_tagging/commit/acc5e0a984e1bbd8f31b94582e61c9cc6bdd3f06
+Commit message: python3 and tf1.2 support + bug fix
+Changes (lines changed): 7
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: python3_compatibility_dict_methods
+
+bug_description:
+buggy_code 使用了 Python 2 的 dict.itervalues() 和 dict.iteritems() 方法，以及
+data.keys()[0] 的索引方式，这些在 Python 3 中会导致 AttributeError 或 TypeError。fixed_code
+将其改为 Python 3 兼容的 data.values()、data.items() 和 list(data.keys())[0]。

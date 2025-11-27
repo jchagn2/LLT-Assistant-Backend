@@ -1,0 +1,22 @@
+ID: bugfix043
+
+=== Source Info / 源信息 ===
+Repo 仓库: Xyntax/POC-T
+File 文件: plugin/useragent.py
+Buggy SHA (before fix): 039bcbcded46d24dc0d64512dbece02e44e91584
+Fixed SHA (after fix): e48b8a751c439ef153cdfde69aaff5fef5d380f0
+Parent commit URL: https://github.com/Xyntax/POC-T/commit/039bcbcded46d24dc0d64512dbece02e44e91584
+Fix commit URL: https://github.com/Xyntax/POC-T/commit/e48b8a751c439ef153cdfde69aaff5fef5d380f0
+Commit message: Enhanced error-handling
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: YES
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: deprecated_dict_has_key_method
+
+bug_description:
+buggy_code 使用了 Python 2 中已弃用的 dict.has_key() 方法，在 Python 3 中会导致 AttributeError
+运行时错误。fixed_code 将其替换为更现代且兼容的 'key in dict' 语法。

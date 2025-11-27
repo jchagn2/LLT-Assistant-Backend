@@ -1,0 +1,23 @@
+ID: bugfix050
+
+=== Source Info / 源信息 ===
+Repo 仓库: openai/pixel-cnn
+File 文件: train.py
+Buggy SHA (before fix): 0ff8ab51a9685bdb47ea7823ffeaee1c4f2009c6
+Fixed SHA (after fix): d6f19ad9ccf4513459442af21df463f10a79642f
+Parent commit URL: https://github.com/openai/pixel-cnn/commit/0ff8ab51a9685bdb47ea7823ffeaee1c4f2009c6
+Fix commit URL: https://github.com/openai/pixel-cnn/commit/d6f19ad9ccf4513459442af21df463f10a79642f
+Commit message: fix
+Changes (lines changed): 2
+
+Syntax error in buggy code? 语法错误?: NO
+
+=== LLM Analysis / AI 分析 ===
+is_bug: True
+is_runtime_error: True
+short_label: incorrect_gpu_placeholder_count
+
+bug_description:
+在buggy_code中，xs列表的创建使用了错误的循环范围：range(args.batch_size)而不是range(args.nr_gpu)。这会导致当
+GPU数量不等于batch_size时，程序会因TensorFlow占位符数量不匹配而崩溃。fixed版本将循环范围修正为range(args.nr_gpu)，
+确保为每个GPU创建正确的占位符数量。
