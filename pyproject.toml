@@ -17,9 +17,6 @@ dependencies = [
     "python-multipart>=0.0.6",
     "pydantic-settings>=2.1.0",
     "pytest>=9.0.1",
-    "langchain>=0.1.0",
-    "langchain-openai>=0.0.2",
-    "langchain-core>=0.1.0",
     "redis>=7.1.0",
     "neo4j>=5.13.0",
 ]
