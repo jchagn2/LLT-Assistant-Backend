@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from starlette.responses import Response as StarletteResponse
 
 from app.analyzers.rule_engine import RuleEngine
-from app.api.v1 import debug_routes
+from app.api.v1.debug_routes import router as debug_router
 from app.api.v1.schemas import (
     AsyncJobResponse,
     CoverageOptimizationRequest,
@@ -569,4 +569,4 @@ async def analyze_impact(
 
 
 # Include debug routes for Neo4j testing
-router.include_router(debug_routes.router)
+router.include_router(debug_router)
